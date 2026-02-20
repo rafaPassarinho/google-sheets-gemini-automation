@@ -1,0 +1,98 @@
+from google import genai
+import json
+import os
+from dotenv import load_dotenv
+from utils import get_today_str_iso
+
+load_dotenv()
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+MODEL_NAME = "gemini-2.5-flash-lite"
+
+def parse_audio_expense(audio_path: str):
+    """
+    Transcreve o áudio e retorna um dict:
+    {
+      "tipo": "receita" | "despesa_fixa" | "despesa_diaria",
+      "valor": float,
+      "categoria": str,
+      "data": "YYYY-MM-DD",
+      "descricao": str
+    }
+    """
+    # instruções claras para o modelo
+    prompt = f"""
+    Você é um assistente financeiro que classifica gastos e receitas.
+
+    REGRAS PARA TIPOS:
+    - "receita": dinheiro que entra (salário, reembolso, rendimentos, etc.).
+    - "despesa_fixa": contas mensais ou recorrentes (energia, água, gás, condomínio, aluguel, wifi, telefone, cartão de crédito, seguro, etc.).
+    - "despesa_diaria": gastos do dia a dia (mercado, restaurante, lanchonete, combustível, transporte, farmácia, bar, lazer, etc.).
+    - **CASO ESPECIAL**: Se o usuário disser que NÃO gastou nada (ex: "não gastei nada", "hoje não teve gasto", "zero gasto"), retorne tipo "despesa_diaria" com valor 0.0.
+
+    Exemplos:
+    - "Gastei 50 reais de energia" -> tipo = "despesa_fixa"
+    - "Paguei o condomínio hoje" -> tipo = "despesa_fixa"
+    - "Gastei 20 reais no mercado" -> tipo = "despesa_diaria"
+    - "Comprei um lanche de 15" -> tipo = "despesa_diaria"
+    - "Recebi 500 de salário" -> tipo = "receita"
+    - "Hoje eu não gastei nada" -> tipo = "despesa_diaria", valor = 0.0
+    - "Não tive gastos hoje" -> tipo = "despesa_diaria", valor = 0.0
+
+    CAMPO DATA:
+    - Se o áudio falar "hoje", "agora" ou não falar data, use "{get_today_str_iso()}".
+    - Se mencionar explicitamente uma data (ex: "dia 10", "10 de fevereiro"), converta para o formato "YYYY-MM-DD" correto.
+
+    FORMATO DE RESPOSTA:
+    Responda APENAS com um JSON válido, sem texto extra, no formato:
+
+    {{
+      "tipo": "receita" | "despesa_fixa" | "despesa_diaria",
+      "valor": 13.8,  // use ponto como separador decimal, use 0.0 para "não gastei nada"
+      "categoria": "mercado",  // use "nenhum" se não houver gasto
+      "data": "YYYY-MM-DD",
+      "descricao": "Gasto no mercado"  // use "Sem gastos" se não houver gasto
+    }}
+    """
+    audio_file = client.files.upload(audio_path)
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[prompt, audio_file],
+        config={
+            "response_mime_type": "application/json"
+        }
+    )
+    try:
+        text = response.text.strip()
+        if text.startswith("```json"):
+            text = text[7:-3].strip()  # remove ```json ... ```
+        elif text.startswith("```"):
+            text = text[3:-3].strip()  # remove ``` ... ```
+        
+        data = json.loads(text)
+
+        # normalização/validações
+        data["valor"] = float(data["valor"])
+        
+        if not data.get("tipo"):
+            # fallback: tudo que não for receita vira despesa_diaria
+            data["tipo"] = "despesa_diaria"
+
+        if data["tipo"] not in ["receita", "despesa_fixa", "despesa_diaria"]:
+            data["tipo"] = "despesa_diaria"
+
+        if not data.get("data"):
+            data["data"] = get_today_str_iso()
+        
+        if not data.get("descricao"):
+            data["descricao"] = f"{data['tipo']} de {data['valor']}"
+        
+        if not data.get("categoria"):
+            data["categoria"] = "outros"
+
+        return data
+    
+    except json.JSONDecodeError:
+        raise ValueError(f"Resposta do modelo não é um JSON válido: {response.text}")
+    finally:
+        client.files.delete(audio_file.name)
