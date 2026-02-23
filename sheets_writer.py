@@ -95,12 +95,17 @@ def _get_cell_float(value: str) -> float:
 
 def append_expense_to_sheet(parsed_data):
     """
-    Atualiza a linha do dia atual:
+    Atualiza a linha baseada na data em parsed_data["data"].
+
+    Lógica de valores:
+    - Se valor = 0.0, limpa Diário E Saída (remove estimativas)
+    - Se a célula tiver placeholder "R$ 33,36", substitui pelo valor do gasto.
+    - Se nota da célula contiver '*': substitui o valor
+    - Caso contrário, soma o valor do gasto ao valor existente na célula.
     - receita -> soma em "Entrada"
     - despesa_fixa -> soma em "Saída"
     - despesa_diaria -> soma em "Diário"
 
-    Se já houver valor naquele dia e valor for diferente de 33,36.
     """
     gc = get_sheets_client()
     target_date = parsed_data.get("data", get_today_str_iso())
@@ -120,6 +125,24 @@ def append_expense_to_sheet(parsed_data):
         ws.update_cell(row, pos["data_col"], row - 2)
 
     valor = float(parsed_data["valor"])
+
+    # sem gasto: limpar Diário e Saída
+    if valor == 0.0:
+        print("Sem gastos no dia - limpando Diário e Saída")
+
+        diario_address = gspread.utils.rowcol_to_a1(row, pos["diario_col"])
+        ws.update_cell(row, pos["diario_col"], 0.0)
+        ws.update_note(diario_address, parsed_data.get('descricao', 'N/A'))
+
+        saida_address = gspread.utils.rowcol_to_a1(row, pos["saida_col"])
+        ws.update_cell(row, pos["saida_col"], "")
+        ws.update_note(saida_address, "")
+
+        return (
+            f"Data {target_date} (dia {row - 2}): SEM GASTOS - "
+            f"Diário e Saída limpos (estimativas removidas)"
+        )
+
     if parsed_data["tipo"] == "receita":
         target_col = pos["entrada_col"]
     elif parsed_data["tipo"] == "despesa_fixa":
@@ -128,43 +151,54 @@ def append_expense_to_sheet(parsed_data):
         target_col = pos["diario_col"] 
 
     # Lê o valor atual da célula
+    cell_address = gspread.utils.rowcol_to_a1(row, target_col)
     atual_str = ws.cell(row, target_col).value
     is_placeholder = (atual_str and atual_str.strip() == "R$ 33,36")
 
-    # Atualiza o valor
-    if is_placeholder:
+    nota_existente = get_cell_note(GOOGLE_SHEETS_ID, get_sheet_name(), cell_address)
+    tem_asterisco = nota_existente and '*' in nota_existente
+
+    # decidir se substitui ou soma: se for placeholder, possui valor 0 ou tem asterisco na nota, substitui. Caso contrário, soma.
+    if is_placeholder or atual_str in [None, "", "0", "R$ 0,00"] or tem_asterisco:
+        #substitui o valor
         novo_valor = valor
+        if is_placeholder:
+            acao = "substituiu placeholder"
+        elif tem_asterisco:
+            acao = "substituiu (estimativa)"
+        else:
+            acao = "registrou novo valor"
+        print(f"{acao}: {atual_str} -> {novo_valor:.2f}")
     else:
+        # soma ao valor existente
         atual = _get_cell_float(atual_str)
         novo_valor = atual + valor
-    
+        acao = "somou"
+        print(f"{acao}: {atual:.2f} + {valor:.2f} -> {novo_valor:.2f}")
+
     ws.update_cell(row, target_col, novo_valor)
 
     # Gerenciar notas: substituir se placeholder, append caso contrário
-    cell_address = gspread.utils.rowcol_to_a1(row, target_col)
     nova_descricao = parsed_data.get('descricao', 'N/A')
     
-    if is_placeholder:
+    if is_placeholder or tem_asterisco:
         # Substitui a nota completamente
         nota_final = nova_descricao
-        print(f"📝 Substituindo nota (placeholder detectado)")
+        print(f"📝 Substituindo nota")
     else:
-        # Faz append à nota existente
-        nota_existente = get_cell_note(GOOGLE_SHEETS_ID, get_sheet_name(), cell_address)
-        
+        # Faz append à nota existente        
         if nota_existente and nota_existente.strip():
             # Adiciona separador e nova descrição
             nota_final = f"{nota_existente}\n---\n{nova_descricao}"
-            print(f"📝 Adicionando à nota existente")
+            print(f"Adicionando à nota existente")
         else:
             # Não havia nota, cria nova
             nota_final = nova_descricao
-            print(f"📝 Criando nova nota")
+            print(f"Criando nova nota")
     
     ws.update_note(cell_address, nota_final)
 
     return (
-        f"Dia {row - 2}: tipo={parsed_data['tipo']} "
-        f"{'substituiu' if is_placeholder else '↑'} {valor:.2f} "
-        f"(total agora {novo_valor:.2f})"
+        f"Data {target_date} (dia {row - 2}): tipo={parsed_data['tipo']} "
+        f"{acao} {valor:.2f} (total agora {novo_valor:.2f})"
     )

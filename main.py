@@ -1,4 +1,6 @@
 import os
+import traceback
+
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 from dotenv import load_dotenv
@@ -25,7 +27,7 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Recebi seu áudio, processando...")
 
         parsed = parse_audio_expense(temp_path)
-        resultado = append_expense_to_sheet(temp_path)
+        resultado = append_expense_to_sheet(parsed)
 
         tipo_humano = {
             "receita": "Receita (Entrada)",
@@ -45,9 +47,19 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
             f"📊 Planilha: {get_sheet_name()}\n"
             f"ℹ️ {resultado}"
         )
-        await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(msg)
 
     except Exception as e:
+        # Imprimir traceback completo no terminal
+        print("\n" + "="*60)
+        print("ERRO DETECTADO:")
+        print("="*60)
+        traceback.print_exc()  # Imprime o traceback completo
+        print("="*60 + "\n")
+        
+        # Também salvar em variável se quiser
+        error_details = traceback.format_exc()
+        print(error_details)
         await update.message.reply_text(f"Ops, algo deu errado: {str(e)}")
     finally:
         if temp_path and os.path.exists(temp_path):

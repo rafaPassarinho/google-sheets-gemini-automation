@@ -54,15 +54,16 @@ def parse_audio_expense(audio_path: str):
       "descricao": "Gasto no mercado"  // use "Sem gastos" se não houver gasto
     }}
     """
-    audio_file = client.files.upload(audio_path)
-    response = client.models.generate_content(
-        model=MODEL_NAME,
-        contents=[prompt, audio_file],
-        config={
-            "response_mime_type": "application/json"
-        }
-    )
+    audio_file = client.files.upload(file=audio_path)
+    
     try:
+        response = client.models.generate_content(
+            model=MODEL_NAME,
+            contents=[prompt, audio_file],
+            config={
+                "response_mime_type": "application/json"
+            }
+        )
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:-3].strip()  # remove ```json ... ```
@@ -95,4 +96,4 @@ def parse_audio_expense(audio_path: str):
     except json.JSONDecodeError:
         raise ValueError(f"Resposta do modelo não é um JSON válido: {response.text}")
     finally:
-        client.files.delete(audio_file.name)
+        client.files.delete(name=audio_file.name)
