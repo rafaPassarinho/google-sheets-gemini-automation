@@ -3,6 +3,7 @@ from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from utils import get_columns_for_date, get_sheet_name, get_today_str_iso, GOOGLE_SHEETS_ID
+from datetime import datetime
 
 load_dotenv()
 
@@ -93,19 +94,70 @@ def _get_cell_float(value: str) -> float:
         print(f"Warning: não foi possível converter '{value}' para float. Retornando 0.0")
         return 0.0
 
+def update_economia_sheet(parsed_data):
+    """
+    Atualiza a aba 'Economia' com o valor guardado na caixinha.
+    
+    Estrutura da aba Economia:
+    - Coluna 9 (I): Valor economizado no mês
+    - Linha 5: Janeiro
+    - Linha 6: Fevereiro
+    - Linha 7: Março
+    - ... e assim por diante
+    
+    Args:
+        parsed_data: dict com tipo="economia", valor, data, etc.
+    
+    Returns:
+        str: mensagem de confirmação
+    """
+    gc = get_sheets_client()
+    target_date = parsed_data.get("data", get_today_str_iso())
+    
+    try:
+        sh = gc.open_by_key(GOOGLE_SHEETS_ID)
+        ws_economia = sh.worksheet("Economia")
+    except gspread.WorksheetNotFound:
+        raise ValueError("Aba 'Economia' não encontrada na planilha.")
+    
+    dt = datetime.fromisoformat(target_date)
+    mes = dt.month
+
+    row = 4 + mes  # Janeiro na linha 5, então linha = mês + 4
+    col = 9  # Coluna I
+
+    valor = float(parsed_data["valor"])
+
+    # Lê o valor atual da célula
+    cell_address = gspread.utils.rowcol_to_a1(row, col)
+    atual_str = ws_economia.cell(row, col).value
+    atual = _get_cell_float(atual_str)
+
+    novo_valor = atual + valor
+
+    ws_economia.update_cell(row, col, novo_valor)
+
+    # nome do mês para mensagem
+    meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+    mes_nome = meses[mes - 1]
+
+    return (
+        f"💰 Economia registrada!\n"
+        f"Mês: {mes_nome}/{dt.year}\n"
+        f"Valor guardado: R$ {valor:.2f}\n"
+        f"Total economizado no mês: R$ {novo_valor:.2f}"
+    ) 
+
 def append_expense_to_sheet(parsed_data):
     """
     Atualiza a linha baseada na data em parsed_data["data"].
-
-    Lógica de valores:
-    - Se valor = 0.0, limpa Diário E Saída (remove estimativas)
-    - Se a célula tiver placeholder "R$ 33,36", substitui pelo valor do gasto.
-    - Se nota da célula contiver '*': substitui o valor
-    - Caso contrário, soma o valor do gasto ao valor existente na célula.
-    - receita -> soma em "Entrada"
-    - despesa_fixa -> soma em "Saída"
-    - despesa_diaria -> soma em "Diário"
-
+    
+    Tipos:
+    - receita: soma em "Entrada"
+    - despesa_fixa: soma em "Saída"
+    - despesa_diaria: soma em "Diário"
+    - economia: soma em "Saída" E atualiza aba "Economia"
+    - valor 0.0: limpa "Diário" e "Saída"
     """
     gc = get_sheets_client()
     target_date = parsed_data.get("data", get_today_str_iso())
@@ -141,6 +193,44 @@ def append_expense_to_sheet(parsed_data):
         return (
             f"Data {target_date} (dia {row - 2}): SEM GASTOS - "
             f"Diário e Saída limpos (estimativas removidas)"
+        )
+
+    if parsed_data["tipo"] == "economia":
+        target_col = pos["saida_col"]  # economia é registrada como saída
+
+        cell_address = gspread.utils.rowcol_to_a1(row, target_col)
+        atual_str = ws.cell(row, target_col).value
+        is_placeholder = (atual_str and atual_str.strip() == "R$ 33,36")
+
+        nota_existente = get_cell_note(GOOGLE_SHEETS_ID, get_sheet_name(), cell_address)
+        tem_asterisco = nota_existente and '*' in nota_existente
+
+        if is_placeholder or atual_str in [None, "", "0", "R$ 0,00"] or tem_asterisco:
+            novo_valor = valor
+            acao = "substituiu"
+        else:
+            atual = _get_cell_float(atual_str)
+            novo_valor = atual + valor
+            acao = "somou"
+        
+        ws.update_cell(row, target_col, novo_valor)
+
+        nova_descricao = parsed_data.get('descricao', 'Economia')
+        if is_placeholder or tem_asterisco:
+            nota_final = nova_descricao
+        else:
+            if nota_existente and nota_existente.strip():
+                nota_final = f"{nota_existente}\n---\n{nova_descricao}"
+            else:
+                nota_final = nova_descricao
+
+        ws.update_note(cell_address, nota_final)
+
+        economia_result = update_economia_sheet(parsed_data)
+
+        return (
+            f"Data {target_date} (dia {row - 2}): ECONOMIA {acao} {valor:.2f} "
+            f"(Saída: R$ {novo_valor:.2f})\n\n{economia_result}"
         )
 
     if parsed_data["tipo"] == "receita":
@@ -201,4 +291,4 @@ def append_expense_to_sheet(parsed_data):
     return (
         f"Data {target_date} (dia {row - 2}): tipo={parsed_data['tipo']} "
         f"{acao} {valor:.2f} (total agora {novo_valor:.2f})"
-    )
+    )       

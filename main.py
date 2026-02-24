@@ -29,24 +29,27 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
         parsed = parse_audio_expense(temp_path)
         resultado = append_expense_to_sheet(parsed)
 
-        tipo_humano = {
-            "receita": "Receita (Entrada)",
-            "despesa_fixa": "Despesa Fixa (Saída)",
-            "despesa_diaria": "Despesa Diária (Diário)"
-        }.get(parsed["tipo"], parsed["tipo"])
-
         emoji = "💰" if parsed["tipo"] == "receita" else "💸"
 
-        msg = (
-            f"{emoji} *Registrado!*\n"
-            f"• Tipo: {tipo_humano}\n"
-            f"• Valor: R$ {parsed['valor']:.2f}\n"
-            f"• Categoria: {parsed['categoria']}\n"
-            f"• Data (interpretação): {parsed['data']}\n"
-            f"• Descrição: {parsed['descricao']}\n\n"
-            f"📊 Planilha: {get_sheet_name()}\n"
-            f"ℹ️ {resultado}"
-        )
+        if parsed["valor"] == 0.0:
+            msg = (
+                f"✅ Registrado: SEM GASTOS\n\n"
+                f"🧹 Limpeza realizada:\n"
+                f"• Diário: zerado\n"
+                f"• Saída: limpa (estimativas removidas)\n\n"
+                f"📝 {parsed['descricao']}"
+            )
+        elif parsed["tipo"] == "economia":
+            msg = f"✅ {resultado}"
+        else:
+            msg = (
+                f"{emoji} Registrado com sucesso!\n\n"
+                f"📊 {resultado}\n"
+                f"💰 Valor: R$ {parsed['valor']:.2f}\n"
+                f"📁 Categoria: {parsed['categoria']}\n"
+                f"📝 Descrição: {parsed['descricao']}"
+            )
+        
         await update.message.reply_text(msg)
 
     except Exception as e:

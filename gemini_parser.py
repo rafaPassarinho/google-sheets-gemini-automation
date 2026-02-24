@@ -13,7 +13,7 @@ def parse_audio_expense(audio_path: str):
     """
     Transcreve o áudio e retorna um dict:
     {
-      "tipo": "receita" | "despesa_fixa" | "despesa_diaria",
+      "tipo": "receita" | "despesa_fixa" | "despesa_diaria" | "economia",
       "valor": float,
       "categoria": str,
       "data": "YYYY-MM-DD",
@@ -28,16 +28,23 @@ def parse_audio_expense(audio_path: str):
     - "receita": dinheiro que entra (salário, reembolso, rendimentos, etc.).
     - "despesa_fixa": contas mensais ou recorrentes (energia, água, gás, condomínio, aluguel, wifi, telefone, cartão de crédito, seguro, etc.).
     - "despesa_diaria": gastos do dia a dia (mercado, restaurante, lanchonete, combustível, transporte, farmácia, bar, lazer, etc.).
-    - **CASO ESPECIAL**: Se o usuário disser que NÃO gastou nada (ex: "não gastei nada", "hoje não teve gasto", "zero gasto"), retorne tipo "despesa_diaria" com valor 0.0.
+    - "economia": quando guardar dinheiro na caixinha/poupança/economia (ex: "guardei 100 na caixinha", "economizei 50 reais", "poupança de 200").
+
+    **CASO ESPECIAL - SEM GASTOS:**
+    Se o usuário disser que NÃO gastou nada, retorne:
+    - tipo: "despesa_diaria"
+    - valor: 0.0
+    - categoria: "nenhum"
+    - descricao: "Sem gastos"
 
     Exemplos:
     - "Gastei 50 reais de energia" -> tipo = "despesa_fixa"
-    - "Paguei o condomínio hoje" -> tipo = "despesa_fixa"
     - "Gastei 20 reais no mercado" -> tipo = "despesa_diaria"
-    - "Comprei um lanche de 15" -> tipo = "despesa_diaria"
     - "Recebi 500 de salário" -> tipo = "receita"
-    - "Hoje eu não gastei nada" -> tipo = "despesa_diaria", valor = 0.0
-    - "Não tive gastos hoje" -> tipo = "despesa_diaria", valor = 0.0
+    - "Guardei 100 na caixinha" -> tipo = "economia"
+    - "Economizei 50 reais hoje" -> tipo = "economia"
+    - "Coloquei 200 na poupança" -> tipo = "economia"
+    - "Hoje não gastei nada" -> tipo = "despesa_diaria", valor = 0.0
 
     CAMPO DATA:
     - Se o áudio falar "hoje", "agora" ou não falar data, use "{get_today_str_iso()}".
@@ -47,11 +54,11 @@ def parse_audio_expense(audio_path: str):
     Responda APENAS com um JSON válido, sem texto extra, no formato:
 
     {{
-      "tipo": "receita" | "despesa_fixa" | "despesa_diaria",
-      "valor": 13.8,  // use ponto como separador decimal, use 0.0 para "não gastei nada"
-      "categoria": "mercado",  // use "nenhum" se não houver gasto
+      "tipo": "receita" | "despesa_fixa" | "despesa_diaria" | "economia",
+      "valor": 13.8,
+      "categoria": "mercado",
       "data": "YYYY-MM-DD",
-      "descricao": "Gasto no mercado"  // use "Sem gastos" se não houver gasto
+      "descricao": "Gasto no mercado"
     }}
     """
     audio_file = client.files.upload(file=audio_path)
@@ -64,6 +71,7 @@ def parse_audio_expense(audio_path: str):
                 "response_mime_type": "application/json"
             }
         )
+
         text = response.text.strip()
         if text.startswith("```json"):
             text = text[7:-3].strip()  # remove ```json ... ```
@@ -79,21 +87,32 @@ def parse_audio_expense(audio_path: str):
             # fallback: tudo que não for receita vira despesa_diaria
             data["tipo"] = "despesa_diaria"
 
-        if data["tipo"] not in ["receita", "despesa_fixa", "despesa_diaria"]:
+        if data["tipo"] not in ["receita", "despesa_fixa", "despesa_diaria", "economia"]:
             data["tipo"] = "despesa_diaria"
 
         if not data.get("data"):
             data["data"] = get_today_str_iso()
         
         if not data.get("descricao"):
-            data["descricao"] = f"{data['tipo']} de {data['valor']}"
+            if data["valor"] == 0.0:
+                data["descricao"] = "Sem gastos"
+            else:
+                data["descricao"] = f"{data['tipo']} de {data['valor']}"
         
         if not data.get("categoria"):
-            data["categoria"] = "outros"
+            if data["valor"] == 0.0:
+                data["categoria"] = "nenhum"
+            elif data["tipo"] == "economia":
+                data["categoria"] = "poupança"
+            else:
+                data["categoria"] = "outros"
 
         return data
     
     except json.JSONDecodeError:
         raise ValueError(f"Resposta do modelo não é um JSON válido: {response.text}")
     finally:
-        client.files.delete(name=audio_file.name)
+        try:
+            client.files.delete(name=audio_file.name)
+        except Exception as e:
+            print(f"Erro ao deletar arquivo do modelo: {e}")
