@@ -33,7 +33,7 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
 
         if parsed["valor"] == 0.0:
             msg = (
-                f"✅ Registrado: SEM GASTOS\n\n"
+                f"✅ Registrado no dia {parsed['data']}: SEM GASTOS\n\n"
                 f"🧹 Limpeza realizada:\n"
                 f"• Diário: zerado\n"
                 f"• Saída: limpa (estimativas removidas)\n\n"

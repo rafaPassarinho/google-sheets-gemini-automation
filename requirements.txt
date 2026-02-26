@@ -1,0 +1,13 @@
+# Telegram Bot
+python-telegram-bot
+
+# Environment Variables
+python-dotenv
+
+# Google Sheets API
+gspread
+google-auth
+google-api-python-client
+
+# Google Gemini AI
+google-genai

@@ -184,7 +184,7 @@ def append_expense_to_sheet(parsed_data):
 
         diario_address = gspread.utils.rowcol_to_a1(row, pos["diario_col"])
         ws.update_cell(row, pos["diario_col"], 0.0)
-        ws.update_note(diario_address, parsed_data.get('descricao', 'N/A'))
+        ws.update_note(diario_address, "")
 
         saida_address = gspread.utils.rowcol_to_a1(row, pos["saida_col"])
         ws.update_cell(row, pos["saida_col"], "")
