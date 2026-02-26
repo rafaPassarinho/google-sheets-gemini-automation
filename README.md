@@ -7,18 +7,18 @@ Automação da "Planilha do Breno" (Termômetro Financeiro) através de um bot d
 ![Google Sheets](https://img.shields.io/badge/google-sheets-green.svg)
 ![Gemini AI](https://img.shields.io/badge/gemini-ai-orange.svg)
 
-## 🎯 Sobre o Projeto
+## Sobre o Projeto
 
 Este projeto automatiza o controle financeiro pessoal através de um bot do Telegram que:
-- 🎤 **Processa áudios** enviados pelo usuário usando Gemini AI
-- 📝 **Classifica automaticamente** gastos em categorias (receita, despesa fixa, despesa diária, economia)
-- 📊 **Atualiza o Google Sheets** em tempo real
-- 💰 **Gerencia economias** em aba dedicada
-- 🔄 **Substitui estimativas** por valores reais automaticamente
+- **Processa áudios** enviados pelo usuário usando Gemini AI
+- **Classifica automaticamente** gastos em categorias (receita, despesa fixa, despesa diária, economia)
+- **Atualiza o Google Sheets** em tempo real
+- **Gerencia economias** em aba dedicada
+- **Substitui estimativas** por valores reais automaticamente
 
-## ✨ Funcionalidades
+## Funcionalidades
 
-### 🎙️ Processamento Inteligente de Áudio
+### Processamento Inteligente de Áudio
 - Envie áudios naturais como: *"Gastei 25 reais no mercado"*
 - IA identifica automaticamente:
   - Tipo de transação (receita, despesa fixa, despesa diária, economia)
@@ -27,7 +27,7 @@ Este projeto automatiza o controle financeiro pessoal através de um bot do Tele
   - Data (hoje ou data específica)
   - Descrição
 
-### 📈 Categorização Automática
+### Categorização Automática
 
 | Tipo | Exemplos | Destino na Planilha |
 |------|----------|---------------------|
@@ -36,20 +36,20 @@ Este projeto automatiza o controle financeiro pessoal através de um bot do Tele
 | **Despesa Diária** | Mercado, lanche, transporte | Coluna "Diário" |
 | **Economia** | Guardei na caixinha | Coluna "Saída" + Aba "Economia" |
 
-### 🎯 Recursos Especiais
+### Recursos Especiais
 
-- **Placeholder Inteligente**: Detecta `R$ 33,36` como valor provisório e substitui automaticamente
+- **Placeholder Inteligente**: Detecta `R$ 33,36`(valor específico do gasto Diário) como valor provisório e substitui automaticamente
 - **Estimativas com Asterisco**: Notas com `*` indicam valores estimados que serão substituídos
 - **Dia Sem Gastos**: Ao dizer *"hoje não gastei nada"*, limpa valores e remove estimativas
 - **Múltiplos Gastos**: Soma automaticamente gastos adicionais no mesmo dia
 - **Histórico em Notas**: Mantém registro detalhado de cada transação nas notas das células
 
-### 💾 Integração com Google Sheets
+### Integração com Google Sheets
 
 - **Aba Principal (Ano)**: Registra transações diárias organizadas por mês
 - **Aba Economia**: Acumula valores guardados mensalmente
 
-## 🛠️ Tecnologias Utilizadas
+## Tecnologias Utilizadas
 
 - **Python 3.11+**
 - **python-telegram-bot**: Criação do bot do Telegram
@@ -58,7 +58,7 @@ Este projeto automatiza o controle financeiro pessoal através de um bot do Tele
 - **gspread**: Interface Python para Google Sheets
 - **python-dotenv**: Gerenciamento de variáveis de ambiente
 
-## 📋 Pré-requisitos
+## Pré-requisitos
 
 ### 1. API Keys e Credenciais
 
@@ -124,7 +124,7 @@ GOOGLE_API_KEY=sua_chave_gemini_api
 GOOGLE_SHEETS_ID=id_da_sua_planilha
 ```
 
-**⚠️ Importante**: O arquivo `.env` já está no `.gitignore` e não deve ser commitado!
+** Importante**: O arquivo `.env` já está no `.gitignore` e não deve ser commitado!
 
 ### 5. Adicione as Credenciais do Google
 
@@ -136,7 +136,7 @@ Coloque o arquivo `credentials.json` (Service Account) na raiz do projeto.
 2. Copie o valor do campo `"client_email"`
 3. Compartilhe sua planilha Google Sheets com esse email (permissão de Editor)
 
-## ▶️ Como Usar
+## Como Usar
 
 ### Iniciar o Bot
 
@@ -224,8 +224,8 @@ google-sheets-gemini-automation/
 - Confirme que a GOOGLE_API_KEY do Gemini está válida
 - Teste o bot localmente primeiro antes do deploy
 
-## 📝 TODO / Melhorias Futuras
-
+##  TODO / Melhorias Futuras
+- [ ] Adicionar um valor de "gasto diário" personalizado por usuário
 - [ ] Adicionar suporte a múltiplos usuários
 - [ ] Geração de gráficos automáticos no bot do Telegram
 - [ ] Comandos para consultar totais do mês
