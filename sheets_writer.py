@@ -15,6 +15,9 @@ SCOPES = [
 def get_sheets_client():
     """
     Cria cliente autenticado para Google Sheets usando credenciais de conta de serviço.
+    
+    return:
+        gspread.Client: cliente autenticado para interagir com Google Sheets.
     """
     creds = Credentials.from_service_account_file(
         "credentials.json",
@@ -24,7 +27,11 @@ def get_sheets_client():
     return gc
 
 def get_sheets_service():
-    """Cria o serviço da API do Google Sheets"""
+    """Cria o serviço da API do Google Sheets
+    
+    return:
+        googleapiclient.discovery.Resource: serviço autenticado para interagir com Google Sheets.
+    """
     creds = Credentials.from_service_account_file(
         "credentials.json",
         scopes=SCOPES
@@ -78,6 +85,11 @@ def get_cell_note(spreadsheet_id: str, sheet_name: str, cell_address: str) -> st
 def _get_cell_float(value: str) -> float:
     """
     Converte valor da célula (string) para float, tratando vazio e removendo "R$" e vírgulas. Ex: "R$ 1.234,56" -> 1234.56
+
+    Args:
+        value (str): valor da célula como string
+    Returns:
+        float: valor convertido, ou 0.0 se não for possível converter
     """
     if value is None or value == "":
         return 0.0
@@ -94,7 +106,7 @@ def _get_cell_float(value: str) -> float:
         print(f"Warning: não foi possível converter '{value}' para float. Retornando 0.0")
         return 0.0
 
-def update_economia_sheet(parsed_data):
+def update_economia_sheet(parsed_data: dict) -> str:
     """
     Atualiza a aba 'Economia' com o valor guardado na caixinha.
     
@@ -148,7 +160,7 @@ def update_economia_sheet(parsed_data):
         f"Total economizado no mês: R$ {novo_valor:.2f}"
     ) 
 
-def append_expense_to_sheet(parsed_data):
+def append_expense_to_sheet(parsed_data: dict) -> str:
     """
     Atualiza a linha baseada na data em parsed_data["data"].
     
@@ -158,6 +170,18 @@ def append_expense_to_sheet(parsed_data):
     - despesa_diaria: soma em "Diário"
     - economia: soma em "Saída" E atualiza aba "Economia"
     - valor 0.0: limpa "Diário" e "Saída"
+
+    Estrutura da aba mensal:
+    - Coluna 1 (A): Data (dia do mês)
+    - Coluna 2 (B): Entrada (receitas)
+    - Coluna 3 (C): Saída (despesas fixas + economia)
+    - Coluna 4 (D): Diário (despesas diárias)
+    - Linhas: 3 = dia 1, 4 = dia 2, ..., 33 = dia 31
+
+    Args:
+        parsed_data: dict com as informações extraídas do áudio (tipo, valor, data, descricao, categoria)
+    Returns:
+        str: mensagem de confirmação ou erro
     """
     gc = get_sheets_client()
     target_date = parsed_data.get("data", get_today_str_iso())

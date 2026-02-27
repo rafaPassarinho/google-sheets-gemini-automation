@@ -9,7 +9,7 @@ client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 MODEL_NAME = "gemini-2.5-flash-lite"
 
-def parse_audio_expense(audio_path: str):
+def parse_audio_expense(audio_path: str) -> dict:
     """
     Transcreve o áudio e retorna um dict:
     {
@@ -19,6 +19,13 @@ def parse_audio_expense(audio_path: str):
       "data": "YYYY-MM-DD",
       "descricao": str
     }
+
+    args:
+        audio_path (str): caminho para o arquivo de áudio a ser processado.
+    returns:
+        dict: dicionário com as informações extraídas do áudio.
+    raises:
+        ValueError: se a resposta do modelo não for um JSON válido ou faltar campos essenciais.
     """
     # instruções claras para o modelo
     prompt = f"""
