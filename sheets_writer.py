@@ -98,7 +98,7 @@ def _get_cell_float(value: str) -> float:
     if cleaned == "33.36":
         return 33.36
     
-    cleaned = cleaned.replace(".", "").replace(",", ".").strip()
+    cleaned = cleaned.replace(" ", "").replace(".", "").replace(",", ".").strip()
 
     try:
         return float(cleaned)
