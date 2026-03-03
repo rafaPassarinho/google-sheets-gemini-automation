@@ -209,3 +209,12 @@ __marimo__/
 
 # credentials stuff
 credentials.json
+
+# Railway
+.railway/
+
+# Temporários
+temp/
+*.log
+bot.log
+bot_errors.log

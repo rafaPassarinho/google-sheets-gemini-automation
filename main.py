@@ -1,4 +1,5 @@
 import os
+import logging
 import traceback
 
 from telegram import Update
@@ -6,11 +7,28 @@ from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTyp
 from dotenv import load_dotenv
 from gemini_parser import parse_audio_expense
 from sheets_writer import append_expense_to_sheet
-from utils import get_sheet_name
 
 load_dotenv()
 
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Logs no console (Railway captura isso)
+        logging.FileHandler('bot_errors.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Criar pasta temp se não existir
+TEMP_DIR = "temp"
+os.makedirs(TEMP_DIR, exist_ok=True)
+
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+
+if not TELEGRAM_TOKEN:
+    raise ValueError("❌ TELEGRAM_TOKEN não encontrado no .env")
 
 async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     temp_path = None
