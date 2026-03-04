@@ -68,7 +68,7 @@ def parse_audio_expense(audio_path: str) -> dict:
       "descricao": "Gasto no mercado"
     }}
     """
-    audio_file = client.files.upload(file=audio_path)
+    audio_file = client.files.upload(file=audio_path, config={"mime_type": "audio/ogg"})
     
     try:
         response = client.models.generate_content(
