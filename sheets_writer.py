@@ -62,10 +62,25 @@ def get_sheets_service():
     return:
         googleapiclient.discovery.Resource: serviço autenticado para interagir com Google Sheets.
     """
-    creds = Credentials.from_service_account_file(
-        "credentials.json",
-        scopes=SCOPES
-    )
+    credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON") or os.getenv("CREDENTIALS_JSON")
+    
+    if credentials_json:
+        try:
+            creds_dict = json.loads(credentials_json)
+            creds = Credentials.from_service_account_info(
+                creds_dict,
+                scopes=SCOPES
+            )
+        except json.JSONDecodeError as e:
+            raise ValueError(f"GOOGLE_CREDENTIALS_JSON inválido: {e}")
+    elif os.path.exists("credentials.json"):
+        creds = Credentials.from_service_account_file(
+            "credentials.json",
+            scopes=SCOPES
+        )
+    else:
+        raise FileNotFoundError("Credenciais não encontradas!")
+    
     service = build('sheets', 'v4', credentials=creds)
     return service
 
