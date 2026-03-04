@@ -1,4 +1,7 @@
 import gspread
+import json
+import os
+
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
@@ -19,10 +22,37 @@ def get_sheets_client():
     return:
         gspread.Client: cliente autenticado para interagir com Google Sheets.
     """
-    creds = Credentials.from_service_account_file(
-        "credentials.json",
-        scopes=SCOPES
-    )
+    credentials_json = os.getenv("GOOGLE_CREDENTIALS_JSON") or os.getenv("CREDENTIALS_JSON")
+    
+    if credentials_json:
+        try:
+            # Parse do JSON da variável de ambiente
+            creds_dict = json.loads(credentials_json)
+            creds = Credentials.from_service_account_info(
+                creds_dict,
+                scopes=SCOPES
+            )
+            print("✓ Credenciais carregadas da variável de ambiente")
+        except json.JSONDecodeError as e:
+            raise ValueError(f"GOOGLE_CREDENTIALS_JSON inválido: {e}")
+        except Exception as e:
+            raise ValueError(f"Erro ao processar credenciais da variável de ambiente: {e}")
+    
+    # Fallback: tentar arquivo local (para desenvolvimento)
+    elif os.path.exists("credentials.json"):
+        creds = Credentials.from_service_account_file(
+            "credentials.json",
+            scopes=SCOPES
+        )
+        print("✓ Credenciais carregadas do arquivo local")
+    
+    else:
+        raise FileNotFoundError(
+            "Credenciais não encontradas!\n"
+            "Configure a variável de ambiente GOOGLE_CREDENTIALS_JSON ou\n"
+            "crie o arquivo credentials.json"
+        )
+    
     gc = gspread.authorize(creds)
     return gc
 
