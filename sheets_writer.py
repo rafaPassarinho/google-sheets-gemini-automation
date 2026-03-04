@@ -141,7 +141,7 @@ def update_economia_sheet(parsed_data: dict) -> str:
     valor = float(parsed_data["valor"])
 
     # Lê o valor atual da célula
-    cell_address = gspread.utils.rowcol_to_a1(row, col)
+    
     atual_str = ws_economia.cell(row, col).value
     atual = _get_cell_float(atual_str)
 
@@ -293,7 +293,7 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
     ws.update_cell(row, target_col, novo_valor)
 
     # Gerenciar notas: substituir se placeholder, append caso contrário
-    nova_descricao = parsed_data.get('descricao', 'N/A')
+    nova_descricao = f"R$ {valor:.2f} - {parsed_data.get('descricao', '')}".strip()
     
     if is_placeholder or tem_asterisco:
         # Substitui a nota completamente
