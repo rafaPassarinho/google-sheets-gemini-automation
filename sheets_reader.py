@@ -80,7 +80,7 @@ def get_monthly_summary(month: int = None, year: int = None) -> dict:
     receitas = _cell_to_float(ws.cell(38, cols["col_entrada"]).value)
     despesas_fixas = _cell_to_float(ws.cell(38, cols["col_saida"]).value)
     despesas_diarias = _cell_to_float(ws.cell(38, cols["col_diario"]).value)
-    total_saidas = _cell_to_float(ws.cell(41, cols["total_saida"]).value)
+    total_saidas = _cell_to_float(ws.cell(41, cols["col_total_saida"]).value)
 
     # calcular performance
     saldo = receitas - total_saidas
