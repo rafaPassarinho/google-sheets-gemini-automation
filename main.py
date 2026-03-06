@@ -226,8 +226,8 @@ async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 *Comandos:*
 /start - Mensagem inicial
-/resumo_semanal - Gastos da semana (seg-dom)
-/resumo_mensal - Gastos do mês atual
+/resumo\\_semanal - Gastos da semana (seg-dom)
+/resumo\\_mensal - Gastos do mês atual
 /ajuda - Esta mensagem
 """
     await update.message.reply_text(help_text, parse_mode="Markdown")
@@ -249,7 +249,7 @@ async def resumo_semanal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💸 Fixas: {format_currency(data['despesas_fixas'])}\n"
             f"🛒 Diárias: {format_currency(data['despesas_diarias'])}\n"
             f"📊 *Total Saídas:* {format_currency(data['total_saidas'])}\n\n"
-            f"{'🟢' if data['saldo'] >= 0 else '🔴'} *Saldo:* {format_currency(data['saldo'])}"
+            f"{'🟢' if data['saldo'] >= 0 else '🔴'} *Performance:* {format_currency(data['saldo'])}"
         )
         
         await update.message.reply_text(msg, parse_mode="Markdown")
@@ -283,7 +283,7 @@ async def resumo_mensal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"💸 Fixas: {format_currency(data['despesas_fixas'])}\n"
             f"🛒 Diárias: {format_currency(data['despesas_diarias'])}\n"
             f"📊 *Total Saídas:* {format_currency(data['total_saidas'])}\n\n"
-            f"{'🟢' if data['saldo'] >= 0 else '🔴'} *Saldo:* {format_currency(data['saldo'])}"
+            f"{'🟢' if data['saldo'] >= 0 else '🔴'} *Performance:* {format_currency(data['saldo'])}"
         )
         
         await update.message.reply_text(msg, parse_mode="Markdown")

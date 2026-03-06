@@ -77,7 +77,7 @@ def get_monthly_summary(month: int = None, year: int = None) -> dict:
     # linha 41: total de saídas (despesas fixas + diárias)
 
     # buscar valores
-    receitas = _cell_to_float(ws.cell(38, cols["col_entradas"]).value)
+    receitas = _cell_to_float(ws.cell(38, cols["col_entrada"]).value)
     despesas_fixas = _cell_to_float(ws.cell(38, cols["col_saida"]).value)
     despesas_diarias = _cell_to_float(ws.cell(38, cols["col_diario"]).value)
     total_saidas = _cell_to_float(ws.cell(41, cols["total_saida"]).value)
@@ -144,7 +144,7 @@ def get_weekly_summary() -> dict:
         row = 2 + dia
 
         # somar valores do dia
-        receitas_totais += _cell_to_float(ws.cell(row, cols["col_entradas"]).value)
+        receitas_totais += _cell_to_float(ws.cell(row, cols["col_entrada"]).value)
         despesas_fixas_totais += _cell_to_float(ws.cell(row, cols["col_saida"]).value)
         despesas_diarias_totais += _cell_to_float(ws.cell(row, cols["col_diario"]).value)
 
