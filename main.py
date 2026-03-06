@@ -3,10 +3,13 @@ import logging
 import traceback
 
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from dotenv import load_dotenv
 from gemini_parser import parse_audio_expense
 from sheets_writer import append_expense_to_sheet
+from sheets_reader import get_monthly_summary, get_weekly_summary, format_currency
+from datetime import datetime
+from utils import TIMEZONE
 
 load_dotenv()
 
@@ -30,6 +33,112 @@ TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 if not TELEGRAM_TOKEN:
     raise ValueError("❌ TELEGRAM_TOKEN não encontrado no .env")
 
+def format_user_message(parsed_data: dict, sheets_result: str) -> str:
+    """
+    Formata mensagem amigável para o usuário baseada nos dados parseados.
+
+    Args:
+        parsed_data (dict): Dicionário com as chaves 'tipo', 'valor', 'categoria', 'descricao', 'data'.
+        sheets_result (str): Resultado formatado retornado pela função append_expense_to_sheet (para logs)
+    """
+    valor = parsed_data["valor"]
+    data = parsed_data["data"]
+    descricao = parsed_data["descricao"]
+    categoria = parsed_data["categoria"]
+    tipo = parsed_data["tipo"]
+
+    # extrair dia do mês da data parseada
+    dia = int(data.split("-")[2])
+    # extrair mês da data parseada
+    mes = int(data.split("-")[1])
+    # nome do mês para mensagem
+    meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"]
+    nome_mes = meses[mes - 1]
+
+    # CASO 1: Sem Gastos
+    if valor == 0.0:
+        return (
+            f"✅ Registrado no dia {dia} de {nome_mes}\n\n"
+            f"🎉 Sem gastos hoje!\n"
+            f"Diário e Saída foram zerados."
+        )
+    # CASO 2: Economia
+    if tipo == "economia":
+        # Extrair total do mês da resposta do sheets_result (se disponível)
+        # Formato esperado em sheets_result: "...Total economizado no mês: R$ XX.XX"
+        total_mes = None
+        if "Total economizado no mês: R$" in sheets_result:
+            try:
+                total_mes = sheets_result.split("Total economizado no mês: R$")[1].strip()
+            except:
+                pass
+        
+        msg = (
+            f"💰 Economia Registrada - Dia {dia} de {nome_mes}\n\n"
+            f"🏦 Guardado: R$ {valor:.2f}\n"
+            f"📝 {descricao}\n"
+        )
+        
+        if total_mes:
+            msg += f"\n📊 Total no mês: R$ {total_mes}"
+        
+        return msg
+    
+    # CASO 3: Receita
+    if tipo == "receita":
+        return (
+            f"✅ Receita Registrada - Dia {dia} de {nome_mes}\n\n"
+            f"💰 Valor: R$ {valor:.2f}\n"
+            f"📝 {descricao}\n"
+            f"📁 {categoria.title()}"
+        )
+    
+    # CASO 4: Despesa Fixa
+    if tipo == "despesa fixa":
+        emoji_categoria = {
+            "energia": "⚡",
+            "água": "💧",
+            "gás": "🔥",
+            "internet": "🌐",
+            "wifi": "🌐",
+            "telefone": "📱",
+            "condomínio": "🏢",
+            "cartão": "💳",
+            "cartão de crédito": "💳",
+            "impostos": "📄",
+        }.get(categoria.lower(), "💸")
+
+        return (
+            f"{emoji_categoria} Saída Registrada - Dia {dia} de {nome_mes}\n\n"
+            f"💸 Valor: R$ {valor:.2f}\n"
+            f"📝 {descricao}\n"
+            f"📁 {categoria.title()}"
+        )
+    
+    # CASO 5: Despesa Diária
+    emoji_categoria = {
+        "mercado": "🛒",
+        "restaurante": "🍽️",
+        "lanchonete": "🍔",
+        "comida": "🍔",
+        "feira": "🛒",
+        "pastel": "🥟",
+        "bar": "🍻",
+        "combustível": "⛽",
+        "transporte": "🚌",
+        "farmácia": "💊",
+        "lazer": "🎬",
+        "roupas": "👗",
+        "outros": "💸"
+    }.get(categoria.lower(), "💸")
+
+    return (
+        f"{emoji_categoria} Despesa Registrada - Dia {dia} de {nome_mes}\n\n"
+        f"💸 Valor: R$ {valor:.2f}\n"
+        f"📝 {descricao}\n"
+        f"📁 {categoria.title()}"
+    )
+
 async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     temp_path = None
     try:
@@ -42,46 +151,33 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
         temp_path = f"temp/audio_{update.message.message_id}.ogg"
         await file.download_to_drive(temp_path)
 
-        await update.message.reply_text("Recebi seu áudio, processando...")
+        await update.message.reply_text("Processando áudio...")
 
         parsed = parse_audio_expense(temp_path)
-        resultado = append_expense_to_sheet(parsed)
+        sheets_result = append_expense_to_sheet(parsed)
 
-        emoji = "💰" if parsed["tipo"] == "receita" else "💸"
+        # log técnico para debug
+        logger.info(f"Registro: {sheets_result}")
 
-        if parsed["valor"] == 0.0:
-            msg = (
-                f"✅ Registrado no dia {parsed['data']}: SEM GASTOS\n\n"
-                f"🧹 Limpeza realizada:\n"
-                f"• Diário: zerado\n"
-                f"• Saída: limpa (estimativas removidas)\n\n"
-                f"📝 {parsed['descricao']}"
-            )
-        elif parsed["tipo"] == "economia":
-            msg = f"✅ {resultado}"
-        else:
-            msg = (
-                f"{emoji} Registrado com sucesso!\n\n"
-                f"📊 {resultado}\n"
-                f"💰 Valor: R$ {parsed['valor']:.2f}\n"
-                f"📁 Categoria: {parsed['categoria']}\n"
-                f"📝 Descrição: {parsed['descricao']}"
-            )
-        
-        await update.message.reply_text(msg)
+        # formatar mensagem amigável para o usuário
+        user_message = format_user_message(parsed, sheets_result)
+
+        await update.message.reply_text(user_message)
 
     except Exception as e:
-        # Imprimir traceback completo no terminal
-        print("\n" + "="*60)
-        print("ERRO DETECTADO:")
-        print("="*60)
-        traceback.print_exc()  # Imprime o traceback completo
-        print("="*60 + "\n")
+        # Log completo do erro
+        logger.error("="*60)
+        logger.error("ERRO DETECTADO:")
+        logger.error("="*60)
+        logger.error(traceback.format_exc())
+        logger.error("="*60)
         
-        # Também salvar em variável se quiser
-        error_details = traceback.format_exc()
-        print(error_details)
-        await update.message.reply_text(f"Ops, algo deu errado: {str(e)}")
+        # Mensagem amigável para o usuário
+        await update.message.reply_text(
+            f"Ops, algo deu errado!\n\n"
+            f"Erro: {str(e)}\n\n"
+            f"Tente novamente.",
+        )
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
@@ -101,16 +197,120 @@ Exemplo: "Gastei 50 reais em comida ontem" ou "Recebi 200 reais de salário hoje
 - Use palavras-chave como "gastei", "recebi", "reembolso", etc.
 - O bot suporta tanto despesas fixas quanto diárias, basta mencionar no áudio.
 
+*Comandos:*
+/start - Mostra esta mensagem
+/resumo_semanal - Resumo da semana atual
+/resumo_mensal - Resumo do mês atual
+/ajuda - Ajuda detalhada
+
 Pode mandar vários áudios no mesmo dia, o bot vai organizar tudo direitinho na planilha.
 """
     await update.message.reply_text(welcome, parse_mode="Markdown")
 
+async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    help_text = """
+📚 *Ajuda Detalhada*
+
+*Tipos de Registro:*
+💵 *Receita:* "Recebi 500 de salário"
+💸 *Despesa Fixa:* "Paguei 80 de energia"
+🛒 *Despesa Diária:* "Gastei 25 no mercado"
+💰 *Economia:* "Guardei 100 na caixinha"
+🎉 *Sem Gastos:* "Hoje não gastei nada"
+
+*Recursos:*
+• Valores estimados com * são substituídos
+• Valores sem * são somados
+• Economia atualiza aba principal + aba Economia
+• Sem gastos limpa Diário e Saída
+
+*Comandos:*
+/start - Mensagem inicial
+/resumo_semanal - Gastos da semana (seg-dom)
+/resumo_mensal - Gastos do mês atual
+/ajuda - Esta mensagem
+"""
+    await update.message.reply_text(help_text, parse_mode="Markdown")
+
+async def resumo_semanal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando /resumo_semanal - mostra resumo da semana atual completa (seg-dom)"""
+    try:
+        await update.message.reply_text("Calculando resumo semanal...")
+
+        # buscar dados
+        data = get_weekly_summary()
+
+        # formatar mensagem
+        msg = (
+            f"📅 *Resumo Semanal*\n"
+            f"_{data['inicio_semana']} até {data['fim_semana']}_\n\n"
+            f"💵 *Receitas:* {format_currency(data['receitas'])}\n\n"
+            f"*Despesas:*\n"
+            f"💸 Fixas: {format_currency(data['despesas_fixas'])}\n"
+            f"🛒 Diárias: {format_currency(data['despesas_diarias'])}\n"
+            f"📊 *Total Saídas:* {format_currency(data['total_saidas'])}\n\n"
+            f"{'🟢' if data['saldo'] >= 0 else '🔴'} *Saldo:* {format_currency(data['saldo'])}"
+        )
+        
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    
+    except Exception as e:
+        logger.error(f"Erro no resumo semanal: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"Erro ao gerar resumo semanal.\n\n"
+            f"Detalhes: {str(e)}"
+        )
+
+async def resumo_mensal(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando /resumo_mensal - Mostra resumo do mês atual"""
+    try:
+        await update.message.reply_text("📊 Calculando resumo mensal...")
+        
+        # Buscar dados do mês atual
+        now = datetime.now(TIMEZONE)
+        data = get_monthly_summary()
+        
+        # Nome do mês
+        meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        mes_nome = meses[data['mes'] - 1]
+        
+        # Formatar mensagem
+        msg = (
+            f"📅 *Resumo de {mes_nome}/{data['ano']}*\n\n"
+            f"💵 *Receitas:* {format_currency(data['receitas'])}\n\n"
+            f"*Despesas:*\n"
+            f"💸 Fixas: {format_currency(data['despesas_fixas'])}\n"
+            f"🛒 Diárias: {format_currency(data['despesas_diarias'])}\n"
+            f"📊 *Total Saídas:* {format_currency(data['total_saidas'])}\n\n"
+            f"{'🟢' if data['saldo'] >= 0 else '🔴'} *Saldo:* {format_currency(data['saldo'])}"
+        )
+        
+        await update.message.reply_text(msg, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.error(f"Erro no resumo mensal: {e}", exc_info=True)
+        await update.message.reply_text(
+            f"Erro ao gerar resumo mensal.\n\n"
+            f"Detalhes: {str(e)}"
+        )
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # Handlers de comandos
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("ajuda", ajuda))
+    app.add_handler(CommandHandler("resumo_semanal", resumo_semanal))
+    app.add_handler(CommandHandler("resumo_mensal", resumo_mensal))
+    
+    # Handler de áudio
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_or_audio))
-    app.add_handler(MessageHandler(filters.COMMAND & filters.Regex('^/start$'), start))
-    print("Bot iniciado...")
-    print("Ctrl+C para parar.")
+    
+    logger.info("🤖 Bot iniciado...")
+    logger.info("Comandos disponíveis: /start, /ajuda, /resumo_semanal, /resumo_mensal")
+    logger.info("Ctrl+C para parar.")
+
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":

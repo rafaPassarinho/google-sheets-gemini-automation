@@ -1,14 +1,16 @@
 import os
-from datetime import datetime, date
+import pytz
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
 
 GOOGLE_SHEETS_ID = os.getenv("GOOGLE_SHEETS_ID")
+TIMEZONE = pytz.timezone(os.getenv("TZ", "America/Sao_Paulo"))
 
 def get_today_str_iso():
     """YYYY-MM-DD, para registro de data completo (não usado na célula)"""
-    return date.today().isoformat()
+    return datetime.now(TIMEZONE).date().isoformat()
 
 def get_today_day():
     """Retorna apenas o dia do mês (1 a 31)."""

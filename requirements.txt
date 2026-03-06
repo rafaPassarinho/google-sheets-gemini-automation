@@ -11,3 +11,6 @@ google-api-python-client
 
 # Google Gemini AI
 google-genai
+
+# Timezone handling
+pytz
