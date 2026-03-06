@@ -1,6 +1,6 @@
 import gspread
 from datetime import datetime, timedelta
-from sheets_reader import get_sheets_client
+from sheets_writer import get_sheets_client
 from utils import GOOGLE_SHEETS_ID, TIMEZONE
 
 def get_month_column_offsets(month: int) -> dict:
