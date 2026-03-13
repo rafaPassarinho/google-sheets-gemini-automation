@@ -212,7 +212,7 @@ def get_monthly_balance_series(month: int = None, year: int = None) -> dict:
     for day in range(1, max_day + 1):
         row = 2 + day
         raw = ws.cell(row, saldo_col).value
-        labels.append(f"{day:0d2}")
+        labels.append(f"{day:02d}")
         values.append(_cell_to_float(raw))
     
     return {

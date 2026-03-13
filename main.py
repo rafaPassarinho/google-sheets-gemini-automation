@@ -233,6 +233,7 @@ async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /start - Mensagem inicial
 /resumo\\_semanal - Gastos da semana (seg-dom)
 /resumo\\_mensal - Gastos do mês atual
+/grafico\\_saldo - Gráfico do saldo diário no mês atual
 /ajuda - Esta mensagem
 """
     await update.message.reply_text(help_text, parse_mode="Markdown")
