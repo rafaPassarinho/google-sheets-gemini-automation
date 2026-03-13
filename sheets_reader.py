@@ -1,4 +1,6 @@
 import gspread
+import calendar
+
 from datetime import datetime, timedelta
 from sheets_writer import get_sheets_client
 from utils import GOOGLE_SHEETS_ID, TIMEZONE
@@ -21,7 +23,8 @@ def get_month_column_offsets(month: int) -> dict:
         "col_entrada": 2 + base_offset,
         "col_saida": 3 + base_offset,
         "col_diario": 4 + base_offset,
-        "col_total_saida": 4 + base_offset
+        "col_total_saida": 4 + base_offset,
+        "col_saldo": 5 + base_offset
     }
 
 def _cell_to_float(value) -> float:
@@ -174,3 +177,47 @@ def format_currency(value: float) -> str:
         str: Valor formatado como string no formato brasileiro.
     """
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+def get_monthly_balance_series(month: int = None, year: int = None) -> dict:
+    """
+    Retorna a série histórica de saldo diário para o mês especificado.
+    Args:
+        month (int, optional): Mês para o qual a série deve ser buscada (1-12). Se None, usa o mês atual.
+        year (int, optional): Ano para o qual a série deve ser buscada. Se None, usa o ano atual.
+        
+    Returns:
+        dict: Dicionário contendo a lista de saldos diários e as datas correspondentes.
+    """
+    gc = get_sheets_client()
+    now = datetime.now(TIMEZONE)
+
+    if month is None:
+        month = now.month
+    if year is None:
+        year = now.year
+
+    sheet_name = str(year)
+    sh = gc.open_by_key(GOOGLE_SHEETS_ID)
+    ws = sh.worksheet(sheet_name)
+
+    cols = get_month_column_offsets(month)
+    saldo_col = cols["col_saldo"]
+
+    _, last_day = calendar.monthrange(year, month)
+    max_day = now.day if (month == now.month and year == now.year) else last_day
+
+    labels = []
+    values = []
+
+    for day in range(1, max_day + 1):
+        row = 2 + day
+        raw = ws.cell(row, saldo_col).value
+        labels.append(f"{day:0d2}")
+        values.append(_cell_to_float(raw))
+    
+    return {
+        "mes": month,
+        "ano": year,
+        "labels": labels,
+        "values": values
+    }

@@ -1,13 +1,18 @@
+import io
 import os
 import logging
 import traceback
+import matplotlib
+matplotlib.use('Agg')  # Usar backend sem interface gráfica
+import matplotlib.pyplot as plt
 
+from matplotlib.ticker import FuncFormatter
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
 from dotenv import load_dotenv
 from gemini_parser import parse_audio_expense
 from sheets_writer import append_expense_to_sheet
-from sheets_reader import get_monthly_summary, get_weekly_summary, format_currency
+from sheets_reader import get_monthly_summary, get_weekly_summary, format_currency, get_monthly_balance_series
 from datetime import datetime
 from utils import TIMEZONE
 
@@ -295,6 +300,61 @@ async def resumo_mensal(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Detalhes: {str(e)}"
         )
 
+def _currency_formatter(x, _):
+    return f"R$ {x:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+async def grafico_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        await update.message.reply_text("Gerando gráfico de saldo mensal...")
+
+        data = get_monthly_balance_series()
+        labels = data["labels"]
+        values = data["values"]
+
+        if not values:
+            await update.message.reply_text("Não há dados de salfo para este mês.")
+            return
+
+        fig, ax = plt.subplots(figsize=(10, 5), dpi=150)
+
+        # linha principal
+        ax.plot(labels, values, color="#2563EB", linewidth=2.2, marker="o", markersize=4)
+
+        # linha zero (referência)
+        ax.axhline(0, color="#111827", linestyle="--", linewidth=1.2, label="Saldo zero")
+
+        # Área positiva/negativa (visual)
+        ax.fill_between(labels, values, 0, where=[v >= 0 for v in values], alpha=0.15, color="#16A34A")
+        ax.fill_between(labels, values, 0, where=[v < 0 for v in values], alpha=0.15, color="#DC2626")
+
+        ax.set_title("Saldo diário - mês atual", fontsize=13, pad=12)
+        ax.set_xlabel("Dia do mês")
+        ax.set_ylabel("Saldo (R$)")
+        ax.yaxis.set_major_formatter(FuncFormatter(_currency_formatter))
+        ax.grid(axis="y", linestyle=":", alpha=0.4)
+
+        # Evita poluição no eixo X
+        step = max(1, len(labels) // 10)
+        for i, lbl in enumerate(ax.get_xticklabels()):
+            lbl.set_visible(i % step == 0)
+
+        ax.legend(loc="best")
+        fig.tight_layout()
+
+        buffer = io.BytesIO()
+        fig.savefig(buffer, format="png")
+        buffer.seek(0)
+        plt.close(fig)
+
+        await update.message.reply_photo(
+            photo=buffer,
+            caption="📊 Evolução do saldo no mês atual",
+        )
+
+    except Exception as e:
+        logger.error(f"Erro no /grafico_saldo: {e}", exc_info=True)
+        await update.message.reply_text(f"❌ Erro ao gerar gráfico: {str(e)}")
+
 def main():
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
     
@@ -303,6 +363,7 @@ def main():
     app.add_handler(CommandHandler("ajuda", ajuda))
     app.add_handler(CommandHandler("resumo_semanal", resumo_semanal))
     app.add_handler(CommandHandler("resumo_mensal", resumo_mensal))
+    app.add_handler(CommandHandler("grafico_saldo", grafico_saldo))
     
     # Handler de áudio
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_or_audio))
