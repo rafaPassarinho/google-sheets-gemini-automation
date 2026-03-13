@@ -316,40 +316,72 @@ async def grafico_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Não há dados de salfo para este mês.")
             return
 
-        fig, ax = plt.subplots(figsize=(10, 5), dpi=150)
+        plt.rcParams.update({
+            "font.family": "DejaVu Sans",
+            "font.size": 10,
+            "axes.titlesize": 14,
+            "axes.labelsize": 10,
+        })
 
-        # linha principal
-        ax.plot(labels, values, color="#2563EB", linewidth=2.2, marker="o", markersize=4)
+        fig, ax = plt.subplots(figsize=(10.5, 5.2), dpi=150)
+        fig.patch.set_facecolor("#F8FAFC")
+        ax.set_facecolor("#FFFFFF")
 
-        # linha zero (referência)
-        ax.axhline(0, color="#111827", linestyle="--", linewidth=1.2, label="Saldo zero")
+        # Linha principal
+        ax.plot(
+            labels,
+            values,
+            color="#3B82F6",
+            linewidth=2.2,
+            marker="o",
+            markersize=3.8,
+            markerfacecolor="#FFFFFF",
+            markeredgewidth=1.0,
+            markeredgecolor="#3B82F6",
+        )
 
-        # Área positiva/negativa (visual)
-        ax.fill_between(labels, values, 0, where=[v >= 0 for v in values], alpha=0.15, color="#16A34A")
-        ax.fill_between(labels, values, 0, where=[v < 0 for v in values], alpha=0.15, color="#DC2626")
+        # Linha de referência zero
+        ax.axhline(0, color="#94A3B8", linestyle="--", linewidth=1.2, alpha=0.9)
 
-        ax.set_title("Saldo diário - mês atual", fontsize=13, pad=12)
-        ax.set_xlabel("Dia do mês")
-        ax.set_ylabel("Saldo (R$)")
-        ax.yaxis.set_major_formatter(FuncFormatter(_currency_formatter))
-        ax.grid(axis="y", linestyle=":", alpha=0.4)
+        # Grade suave
+        ax.grid(axis="y", linestyle="-", linewidth=0.6, alpha=0.15, color="#334155")
 
-        # Evita poluição no eixo X
-        step = max(1, len(labels) // 10)
-        for i, lbl in enumerate(ax.get_xticklabels()):
-            lbl.set_visible(i % step == 0)
+        # Eixos limpos
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#CBD5E1")
+        ax.spines["bottom"].set_color("#CBD5E1")
 
-        ax.legend(loc="best")
+        # Título
+        meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+                 "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+        ax.set_title(f"Saldo diário — {meses[data['mes'] - 1]}/{data['ano']}", color="#0F172A", pad=12)
+
+        # Eixo X com menos poluição
+        total = len(labels)
+        step = 1 if total <= 16 else (2 if total <= 24 else 3)
+        tick_idx = list(range(0, total, step))
+        ax.set_xticks([labels[i] for i in tick_idx])
+        ax.set_xlabel("Dia do mês", color="#334155")
+        ax.tick_params(axis="x", colors="#475569")
+
+        # Eixo Y em moeda BRL
+        ax.yaxis.set_major_formatter(FuncFormatter(
+            lambda x, _: f"R$ {x:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        ))
+        ax.tick_params(axis="y", colors="#475569")
+        ax.set_ylabel("Saldo (R$)", color="#334155")
+
         fig.tight_layout()
 
         buffer = io.BytesIO()
-        fig.savefig(buffer, format="png")
+        fig.savefig(buffer, format="png", bbox_inches="tight")
         buffer.seek(0)
         plt.close(fig)
 
         await update.message.reply_photo(
             photo=buffer,
-            caption="📊 Evolução do saldo no mês atual",
+            caption="Evolução do saldo no mês (até o último dia)."
         )
 
     except Exception as e:

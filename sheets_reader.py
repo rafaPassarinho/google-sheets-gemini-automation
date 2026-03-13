@@ -204,7 +204,7 @@ def get_monthly_balance_series(month: int = None, year: int = None) -> dict:
     saldo_col = cols["col_saldo"]
 
     _, last_day = calendar.monthrange(year, month)
-    max_day = now.day if (month == now.month and year == now.year) else last_day
+    max_day = last_day
 
     labels = []
     values = []
@@ -213,7 +213,12 @@ def get_monthly_balance_series(month: int = None, year: int = None) -> dict:
         row = 2 + day
         raw = ws.cell(row, saldo_col).value
         labels.append(f"{day:02d}")
-        values.append(_cell_to_float(raw))
+
+        # Células vazias ficam como None para não “forçar” zero no gráfico
+        if raw is None or str(raw).strip() == "":
+            values.append(None)
+        else:
+            values.append(_cell_to_float(raw))
     
     return {
         "mes": month,
