@@ -5,8 +5,19 @@ import os
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
-from utils import get_columns_for_date, get_sheet_name, get_today_str_iso, GOOGLE_SHEETS_ID
+from utils import get_columns_for_date, get_sheet_name, get_today_str_iso, GOOGLE_SHEETS_ID, TIMEZONE
 from datetime import datetime
+
+def _is_future_date(date_str: str) -> bool:
+    """Verifica se a data fornecida é no futuro em relação à data atual.
+    Args:
+        date_str (str): Data no formato 'YYYY-MM-DD'
+    Returns:
+        bool: True se a data for futura, False caso contrário
+    """
+    target_date = datetime.fromisoformat(date_str).date()
+    today = datetime.now(TIMEZONE).date()
+    return target_date > today
 
 load_dotenv()
 
@@ -231,6 +242,10 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
     gc = get_sheets_client()
     target_date = parsed_data.get("data", get_today_str_iso())
     
+    # Verificar se a data é futura
+    is_future = _is_future_date(target_date)
+    future_indicator = " estimativa" if is_future else ""
+
     try:
         sh = gc.open_by_key(GOOGLE_SHEETS_ID)
         ws = sh.worksheet(get_sheet_name())
@@ -285,6 +300,11 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
         ws.update_cell(row, target_col, novo_valor)
 
         nova_descricao = parsed_data.get('descricao', 'Economia')
+
+        # adicionar asterisco se for data futura
+        if is_future:
+            nova_descricao = f"* {nova_descricao}"
+
         if is_placeholder or tem_asterisco:
             nota_final = nova_descricao
         else:
@@ -299,7 +319,7 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
 
         return (
             f"Data {target_date} (dia {row - 2}): ECONOMIA {acao} {valor:.2f} "
-            f"(Saída: R$ {novo_valor:.2f})\n\n{economia_result}"
+            f"(Saída: R$ {novo_valor:.2f}){future_indicator}\n\n{economia_result}"
         )
 
     if parsed_data["tipo"] == "receita":
@@ -340,6 +360,10 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
     # Gerenciar notas: substituir se placeholder, append caso contrário
     nova_descricao = f"R$ {valor:.2f} - {parsed_data.get('descricao', '')}".strip()
     
+    # adicionar asterisco se for data futura
+    if is_future:
+        nova_descricao = f"* {nova_descricao}"
+
     if is_placeholder or tem_asterisco:
         # Substitui a nota completamente
         nota_final = nova_descricao
@@ -359,5 +383,5 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
 
     return (
         f"Data {target_date} (dia {row - 2}): tipo={parsed_data['tipo']} "
-        f"{acao} {valor:.2f} (total agora {novo_valor:.2f})"
+        f"{acao} {valor:.2f} (total agora {novo_valor:.2f}){future_indicator}"
     )       

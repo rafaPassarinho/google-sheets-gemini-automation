@@ -52,6 +52,11 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
     categoria = parsed_data["categoria"]
     tipo = parsed_data["tipo"]
 
+    # detecta estimativa pelo retorno em sheets-writer
+    is_estimativa = " (estimativa)" in (sheets_result or "")
+    estimativa_tag = " (estimativa)" if is_estimativa else ""
+    estimativa_linha = "\n Lançamento futuro (estimativa)" if is_estimativa else ""
+
     # extrair dia do mês da data parseada
     dia = int(data.split("-")[2])
     # extrair mês da data parseada
@@ -63,9 +68,10 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
     # CASO 1: Sem Gastos
     if valor == 0.0:
         return (
-            f"✅ Registrado no dia {dia} de {nome_mes}\n\n"
+            f"✅ Registrado no dia {dia} de {nome_mes}{estimativa_tag}\n\n"
             f"🎉 Sem gastos hoje!\n"
             f"Diário e Saída foram zerados."
+            f"{estimativa_linha}"
         )
     # CASO 2: Economia
     if tipo == "economia":
@@ -79,9 +85,10 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
                 pass
         
         msg = (
-            f"💰 Economia Registrada - Dia {dia} de {nome_mes}\n\n"
+            f"💰 Economia Registrada - Dia {dia} de {nome_mes}{estimativa_tag}\n\n"
             f"🏦 Guardado: R$ {valor:.2f}\n"
             f"📝 {descricao}\n"
+            f"{estimativa_linha}"
         )
         
         if total_mes:
@@ -92,14 +99,15 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
     # CASO 3: Receita
     if tipo == "receita":
         return (
-            f"✅ Receita Registrada - Dia {dia} de {nome_mes}\n\n"
+            f"✅ Receita Registrada - Dia {dia} de {nome_mes}{estimativa_tag}\n\n"
             f"💰 Valor: R$ {valor:.2f}\n"
             f"📝 {descricao}\n"
             f"📁 {categoria.title()}"
+            f"{estimativa_linha}"
         )
     
     # CASO 4: Despesa Fixa
-    if tipo == "despesa fixa":
+    if tipo == "despesa_fixa":
         emoji_categoria = {
             "energia": "⚡",
             "água": "💧",
@@ -114,10 +122,11 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
         }.get(categoria.lower(), "💸")
 
         return (
-            f"{emoji_categoria} Saída Registrada - Dia {dia} de {nome_mes}\n\n"
+            f"{emoji_categoria} Saída Registrada - Dia {dia} de {nome_mes}{estimativa_tag}\n\n"
             f"💸 Valor: R$ {valor:.2f}\n"
             f"📝 {descricao}\n"
             f"📁 {categoria.title()}"
+            f"{estimativa_linha}"
         )
     
     # CASO 5: Despesa Diária
@@ -138,10 +147,11 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
     }.get(categoria.lower(), "💸")
 
     return (
-        f"{emoji_categoria} Despesa Registrada - Dia {dia} de {nome_mes}\n\n"
+        f"{emoji_categoria} Despesa Registrada - Dia {dia} de {nome_mes}{estimativa_tag}\n\n"
         f"💸 Valor: R$ {valor:.2f}\n"
         f"📝 {descricao}\n"
         f"📁 {categoria.title()}"
+        f"{estimativa_linha}"
     )
 
 async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
