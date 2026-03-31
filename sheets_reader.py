@@ -1,9 +1,13 @@
 import gspread
 import calendar
+import os
 
 from datetime import datetime, timedelta
 from sheets_writer import get_sheets_client
 from utils import GOOGLE_SHEETS_ID, TIMEZONE
+from dotenv import load_dotenv
+
+load_dotenv()
 
 def get_month_column_offsets(month: int) -> dict:
     """
@@ -45,16 +49,18 @@ def _cell_to_float(value) -> float:
     except:
         return 0.0
     
-def get_monthly_summary(month: int = None, year: int = None) -> dict:
+def get_monthly_summary(spreadsheet_id: str = None, month: int = None, year: int = None) -> dict:
     """
     Busca o resumo mensal da planilha.
 
     Args:
+        spreadsheet_id (str, optional): ID da planilha do usuário. Se None, usa GOOGLE_SHEETS_ID.
         month (int, optional): Mês para o qual o resumo deve ser buscado (1-12). Se None, usa o mês atual.
         year (int, optional): Ano para o qual o resumo deve ser buscado. Se None, usa o ano atual.
     Returns:
         dict: Dicionário contendo os totais de 'despesas_fixas', 'despesas_diarias', 'total_saidas', saldo
     """
+    sheet_id = spreadsheet_id or os.getenv("GOOGLE_SHEETS_ID")
     gc = get_sheets_client()
 
     # usar data atual se não especificado
@@ -68,7 +74,7 @@ def get_monthly_summary(month: int = None, year: int = None) -> dict:
     sheet_name = str(year)
 
     try:
-        sh = gc.open_by_key(GOOGLE_SHEETS_ID)
+        sh = gc.open_by_key(sheet_id)
         ws = sh.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
         raise ValueError(f"Aba {sheet_name} não encontrada na planilha.")
@@ -98,15 +104,18 @@ def get_monthly_summary(month: int = None, year: int = None) -> dict:
         "saldo": saldo
     }
 
-def get_weekly_summary() -> dict:
+def get_weekly_summary(spreadsheet_id: str = None) -> dict:
     """
     Calcula o resumo semanal (última semana completa: segunda a domingo).
     Soma valores das células individuais dos dias da semana.
 
+    Args:
+        spreadsheet_id (str, optional): ID da planilha do usuário. Se None, usa GOOGLE_SHEETS_ID.
     Returns:
         dict: Dicionário contendo os totais de 'receitas', 'despesas_diarias', 'total_saidas', 'saldo',
         'inicio_semana' e 'fim_semana'.
     """
+    sheet_id = spreadsheet_id or os.getenv("GOOGLE_SHEETS_ID")
     gc = get_sheets_client()
     now = datetime.now(TIMEZONE)
 
@@ -124,7 +133,7 @@ def get_weekly_summary() -> dict:
     # abrir planilha do ano
     sheet_name = str(now.year)
     try:
-        sh = gc.open_by_key(GOOGLE_SHEETS_ID)
+        sh = gc.open_by_key(sheet_id)
         ws = sh.worksheet(sheet_name)
     except gspread.WorksheetNotFound:
         raise ValueError(f"Aba {sheet_name} não encontrada na planilha.")
@@ -178,16 +187,18 @@ def format_currency(value: float) -> str:
     """
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
-def get_monthly_balance_series(month: int = None, year: int = None) -> dict:
+def get_monthly_balance_series(spreadsheet_id: str = None, month: int = None, year: int = None) -> dict:
     """
     Retorna a série histórica de saldo diário para o mês especificado.
     Args:
+        spreadsheet_id (str, optional): ID da planilha do usuário. Se None, usa GOOGLE_SHEETS_ID.
         month (int, optional): Mês para o qual a série deve ser buscada (1-12). Se None, usa o mês atual.
         year (int, optional): Ano para o qual a série deve ser buscada. Se None, usa o ano atual.
         
     Returns:
         dict: Dicionário contendo a lista de saldos diários e as datas correspondentes.
     """
+    sheet_id = spreadsheet_id or os.getenv("GOOGLE_SHEETS_ID")
     gc = get_sheets_client()
     now = datetime.now(TIMEZONE)
 
@@ -197,7 +208,7 @@ def get_monthly_balance_series(month: int = None, year: int = None) -> dict:
         year = now.year
 
     sheet_name = str(year)
-    sh = gc.open_by_key(GOOGLE_SHEETS_ID)
+    sh = gc.open_by_key(sheet_id)
     ws = sh.worksheet(sheet_name)
 
     cols = get_month_column_offsets(month)

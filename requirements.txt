@@ -1,19 +1,19 @@
 # Telegram Bot
-python-telegram-bot
+python-telegram-bot==22.5
 
 # Environment Variables
-python-dotenv
+python-dotenv==1.2.1
 
 # Google Sheets API
-gspread
-google-auth
-google-api-python-client
+gspread==6.2.1
+google-auth==2.47.0
+google-api-python-client==2.187.0
 
 # Google Gemini AI
-google-genai
+google-genai==1.57.0
 
 # Timezone handling
-pytz
+pytz==2026.1.post1
 
 # graphing
-matplotlib
+matplotlib==3.10.8

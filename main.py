@@ -1,32 +1,27 @@
 import io
-import os
 import logging
+import os
 import traceback
-import matplotlib
-matplotlib.use('Agg')  # Usar backend sem interface gráfica
-import matplotlib.pyplot as plt
-
-from matplotlib.ticker import FuncFormatter
-from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, CommandHandler, filters, ContextTypes
-from dotenv import load_dotenv
-from gemini_parser import parse_audio_expense
-from sheets_writer import append_expense_to_sheet
-from sheets_reader import get_monthly_summary, get_weekly_summary, format_currency, get_monthly_balance_series
 from datetime import datetime
-from utils import TIMEZONE
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FuncFormatter
+
+from dotenv import load_dotenv
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
+
+from gemini_parser import parse_audio_expense
+from sheets_reader import get_monthly_summary, get_weekly_summary, format_currency, get_monthly_balance_series
+from sheets_writer import append_expense_to_sheet
+from user_config import get_user
 
 load_dotenv()
 
 # Configurar logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(),  # Logs no console (Railway captura isso)
-        logging.FileHandler('bot_errors.log')
-    ]
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 # Criar pasta temp se não existir
@@ -36,7 +31,14 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 if not TELEGRAM_TOKEN:
-    raise ValueError("❌ TELEGRAM_TOKEN não encontrado no .env")
+    raise ValueError("TELEGRAM_TOKEN não encontrado no .env")
+
+def _require_user(update: Update):
+    tg_user = update.effective_user
+    if not tg_user:
+        return None
+    profile = get_user(tg_user.id)
+    return profile
 
 def format_user_message(parsed_data: dict, sheets_result: str) -> str:
     """
@@ -155,6 +157,11 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
     )
 
 async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    profile = _require_user(update)
+    if not profile:
+        await update.message.reply_text("Você não está cadastrado(a).\nEntre em contato com o(a) administrador(a) para configurar seu perfil.")
+        return
+    
     temp_path = None
     try:
         if update.message.voice:
@@ -169,10 +176,16 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
         await update.message.reply_text("Processando áudio...")
 
         parsed = parse_audio_expense(temp_path)
-        sheets_result = append_expense_to_sheet(parsed)
+
+        sheets_result = append_expense_to_sheet(
+            parsed_data=parsed,
+            spreadsheet_id=profile.spreadsheet_id,
+            placeholder_value=profile.placeholder_value,
+            timezone_name=profile.timezone
+        )
 
         # log técnico para debug
-        logger.info(f"Registro: {sheets_result}")
+        logger.info("Registro: %s", sheets_result)
 
         # formatar mensagem amigável para o usuário
         user_message = format_user_message(parsed, sheets_result)
@@ -220,9 +233,20 @@ Exemplo: "Gastei 50 reais em comida ontem" ou "Recebi 200 reais de salário hoje
 
 Pode mandar vários áudios no mesmo dia, o bot vai organizar tudo direitinho na planilha.
 """
+    profile = _require_user(update)
+    if not profile:
+        telegram_id = update.effective_user.id
+        await update.message.reply_text(f"Você ({telegram_id}) não está cadastrado(a).\nEntre em contato com o(a) administrador(a) para configurar seu perfil.")
+        return
+    
     await update.message.reply_text(welcome, parse_mode="Markdown")
 
 async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    profile = _require_user(update)
+    if not profile:
+        await update.message.reply_text("Você não está cadastrado(a).\nEntre em contato com o(a) administrador(a) para configurar seu perfil.")
+        return
+
     help_text = """
 📚 *Ajuda Detalhada*
 
@@ -250,11 +274,15 @@ async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def resumo_semanal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /resumo_semanal - mostra resumo da semana atual completa (seg-dom)"""
+    profile = _require_user(update)
+    if not profile:
+        await update.message.reply_text("Usuário não cadastrado.")
+        return
     try:
         await update.message.reply_text("Calculando resumo semanal...")
 
         # buscar dados
-        data = get_weekly_summary()
+        data = get_weekly_summary(spreadsheet_id=profile.spreadsheet_id)
 
         # formatar mensagem
         msg = (
@@ -279,12 +307,16 @@ async def resumo_semanal(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def resumo_mensal(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Comando /resumo_mensal - Mostra resumo do mês atual"""
+    
+    profile = _require_user(update)
+    if not profile:
+        await update.message.reply_text("Usuário não cadastrado.")
+        return
     try:
-        await update.message.reply_text("📊 Calculando resumo mensal...")
+        await update.message.reply_text("Calculando resumo mensal...")
         
         # Buscar dados do mês atual
-        now = datetime.now(TIMEZONE)
-        data = get_monthly_summary()
+        data = get_monthly_summary(spreadsheet_id=profile.spreadsheet_id)
         
         # Nome do mês
         meses = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -315,10 +347,15 @@ def _currency_formatter(x, _):
     return f"R$ {x:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 async def grafico_saldo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Comando /grafico_saldo - Gera gráfico do saldo diário no mês atual"""
+    profile = _require_user(update)
+    if not profile:
+        await update.message.reply_text("Usuário não cadastrado.")
+        return
     try:
         await update.message.reply_text("Gerando gráfico de saldo mensal...")
 
-        data = get_monthly_balance_series()
+        data = get_monthly_balance_series(spreadsheet_id=profile.spreadsheet_id)
         labels = data["labels"]
         values = data["values"]
 
@@ -379,7 +416,7 @@ def main():
     # Handler de áudio
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_or_audio))
     
-    logger.info("🤖 Bot iniciado...")
+    logger.info("Bot iniciado...")
     logger.info("Comandos disponíveis: /start, /ajuda, /resumo_semanal, /resumo_mensal")
     logger.info("Ctrl+C para parar.")
 

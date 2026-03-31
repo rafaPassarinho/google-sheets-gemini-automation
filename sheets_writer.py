@@ -1,23 +1,13 @@
 import gspread
 import json
 import os
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from google.oauth2.service_account import Credentials
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
-from utils import get_columns_for_date, get_sheet_name, get_today_str_iso, GOOGLE_SHEETS_ID, TIMEZONE
-from datetime import datetime
-
-def _is_future_date(date_str: str) -> bool:
-    """Verifica se a data fornecida é no futuro em relação à data atual.
-    Args:
-        date_str (str): Data no formato 'YYYY-MM-DD'
-    Returns:
-        bool: True se a data for futura, False caso contrário
-    """
-    target_date = datetime.fromisoformat(date_str).date()
-    today = datetime.now(TIMEZONE).date()
-    return target_date > today
+from utils import get_columns_for_date, get_today_str_iso, TIMEZONE
 
 load_dotenv()
 
@@ -25,6 +15,28 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
+
+def _resolve_tz(timezone_name: str | None):
+    if timezone_name:
+        try:
+            return ZoneInfo(timezone_name)
+        except Exception as e:
+            pass
+    try:
+        tz_name = getattr(TIMEZONE, "zone", None)
+        if tz_name:
+            return ZoneInfo(tz_name)
+    except Exception as e:
+        pass
+    return ZoneInfo("America/Sao_Paulo")
+
+def _sheet_name_for_date(date_str: str) -> str:
+    return str(datetime.fromisoformat(date_str).year)
+
+def _is_future_date(date_str: str, timezone_name: str | None = None) -> bool:
+    target_date = datetime.fromisoformat(date_str).date()
+    today = datetime.now(_resolve_tz(timezone_name)).date()
+    return target_date > today
 
 def get_sheets_client():
     """
@@ -161,8 +173,12 @@ def _get_cell_float(value: str) -> float:
     except ValueError:
         print(f"Warning: não foi possível converter '{value}' para float. Retornando 0.0")
         return 0.0
+    
+def _is_placeholder_value(current_cell_value, placeholder_value: float) -> bool:
+    current = _get_cell_float(current_cell_value)
+    return abs(current - placeholder_value) < 0.0001
 
-def update_economia_sheet(parsed_data: dict) -> str:
+def update_economia_sheet(parsed_data: dict, spreadsheet_id: str) -> str:
     """
     Atualiza a aba 'Economia' com o valor guardado na caixinha.
     
@@ -175,6 +191,7 @@ def update_economia_sheet(parsed_data: dict) -> str:
     
     Args:
         parsed_data: dict com tipo="economia", valor, data, etc.
+        spreadsheet_id: ID da planilha do usuário para atualizar os dados
     
     Returns:
         str: mensagem de confirmação
@@ -183,7 +200,7 @@ def update_economia_sheet(parsed_data: dict) -> str:
     target_date = parsed_data.get("data", get_today_str_iso())
     
     try:
-        sh = gc.open_by_key(GOOGLE_SHEETS_ID)
+        sh = gc.open_by_key(spreadsheet_id)
         ws_economia = sh.worksheet("Economia")
     except gspread.WorksheetNotFound:
         raise ValueError("Aba 'Economia' não encontrada na planilha.")
@@ -216,7 +233,11 @@ def update_economia_sheet(parsed_data: dict) -> str:
         f"Total economizado no mês: R$ {novo_valor:.2f}"
     ) 
 
-def append_expense_to_sheet(parsed_data: dict) -> str:
+def append_expense_to_sheet(parsed_data: dict,
+                            spreadsheet_id: str,
+                            placeholder_value: float = 33.36,
+                            timezone_name: str | None = None
+                            ) -> str:
     """
     Atualiza a linha baseada na data em parsed_data["data"].
     
@@ -236,21 +257,27 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
 
     Args:
         parsed_data: dict com as informações extraídas do áudio (tipo, valor, data, descricao, categoria)
+        spreadsheet_id: ID da planilha do usuário para atualizar os dados
     Returns:
         str: mensagem de confirmação ou erro
     """
+    if not spreadsheet_id:
+        raise ValueError("Spreadsheet ID não informado para o usuário.")
+    
     gc = get_sheets_client()
     target_date = parsed_data.get("data", get_today_str_iso())
-    
+    sheet_name = _sheet_name_for_date(target_date)
+
     # Verificar se a data é futura
-    is_future = _is_future_date(target_date)
-    future_indicator = " estimativa" if is_future else ""
+    is_future = _is_future_date(target_date, timezone_name=timezone_name)
+    future_indicator = " (estimativa)" if is_future else ""
 
     try:
-        sh = gc.open_by_key(GOOGLE_SHEETS_ID)
-        ws = sh.worksheet(get_sheet_name())
+        sh = gc.open_by_key(spreadsheet_id)
+        ws = sh.worksheet(sheet_name)
+
     except gspread.WorksheetNotFound:
-        raise ValueError(f"Aba '{get_sheet_name()}' não encontrada na planilha.")
+        raise ValueError(f"Aba '{sheet_name}' não encontrada na planilha.")
     
     pos = get_columns_for_date(target_date)
     row = pos["row"]
@@ -278,110 +305,49 @@ def append_expense_to_sheet(parsed_data: dict) -> str:
             f"Data {target_date} (dia {row - 2}): SEM GASTOS - "
             f"Diário e Saída limpos (estimativas removidas)"
         )
-
     if parsed_data["tipo"] == "economia":
-        target_col = pos["saida_col"]  # economia é registrada como saída
-
-        cell_address = gspread.utils.rowcol_to_a1(row, target_col)
-        atual_str = ws.cell(row, target_col).value
-        is_placeholder = (atual_str and atual_str.strip() == "R$ 33,36")
-
-        nota_existente = get_cell_note(GOOGLE_SHEETS_ID, get_sheet_name(), cell_address)
-        tem_asterisco = nota_existente and '*' in nota_existente
-
-        if is_placeholder or atual_str in [None, "", "0", "R$ 0,00"] or tem_asterisco:
-            novo_valor = valor
-            acao = "substituiu"
-        else:
-            atual = _get_cell_float(atual_str)
-            novo_valor = atual + valor
-            acao = "somou"
-        
-        ws.update_cell(row, target_col, novo_valor)
-
-        nova_descricao = parsed_data.get('descricao', 'Economia')
-
-        # adicionar asterisco se for data futura
-        if is_future:
-            nova_descricao = f"* {nova_descricao}"
-
-        if is_placeholder or tem_asterisco:
-            nota_final = nova_descricao
-        else:
-            if nota_existente and nota_existente.strip():
-                nota_final = f"{nota_existente}\n---\n{nova_descricao}"
-            else:
-                nota_final = nova_descricao
-
-        ws.update_note(cell_address, nota_final)
-
-        economia_result = update_economia_sheet(parsed_data)
-
-        return (
-            f"Data {target_date} (dia {row - 2}): ECONOMIA {acao} {valor:.2f} "
-            f"(Saída: R$ {novo_valor:.2f}){future_indicator}\n\n{economia_result}"
-        )
-
-    if parsed_data["tipo"] == "receita":
+        target_col = pos["saida_col"]
+    elif parsed_data["tipo"] == "receita":
         target_col = pos["entrada_col"]
     elif parsed_data["tipo"] == "despesa_fixa":
         target_col = pos["saida_col"]
     else:  # despesa_diaria
-        target_col = pos["diario_col"] 
+        target_col = pos["diario_col"]
 
-    # Lê o valor atual da célula
     cell_address = gspread.utils.rowcol_to_a1(row, target_col)
     atual_str = ws.cell(row, target_col).value
-    is_placeholder = (atual_str and atual_str.strip() == "R$ 33,36")
 
-    nota_existente = get_cell_note(GOOGLE_SHEETS_ID, get_sheet_name(), cell_address)
-    tem_asterisco = nota_existente and '*' in nota_existente
+    is_placeholder = _is_placeholder_value(atual_str, placeholder_value)
+    nota_existente = get_cell_note(spreadsheet_id, sheet_name, cell_address)
+    tem_asterisco = "*" in (nota_existente or "")
 
-    # decidir se substitui ou soma: se for placeholder, possui valor 0 ou tem asterisco na nota, substitui. Caso contrário, soma.
     if is_placeholder or atual_str in [None, "", "0", "R$ 0,00"] or tem_asterisco:
-        #substitui o valor
         novo_valor = valor
-        if is_placeholder:
-            acao = "substituiu placeholder"
-        elif tem_asterisco:
-            acao = "substituiu (estimativa)"
-        else:
-            acao = "registrou novo valor"
-        print(f"{acao}: {atual_str} -> {novo_valor:.2f}")
+        acao = "substituiu"
     else:
-        # soma ao valor existente
         atual = _get_cell_float(atual_str)
         novo_valor = atual + valor
         acao = "somou"
-        print(f"{acao}: {atual:.2f} + {valor:.2f} -> {novo_valor:.2f}")
-
+    
     ws.update_cell(row, target_col, novo_valor)
 
-    # Gerenciar notas: substituir se placeholder, append caso contrário
-    nova_descricao = f"R$ {valor:.2f} - {parsed_data.get('descricao', '')}".strip()
-    
-    # adicionar asterisco se for data futura
+    base_desc = parsed_data.get('descricao', '').strip() or parsed_data.get('categoria', 'Lançamento')
+    nova_descricao = f"R$ {valor:.2f} - {base_desc}".strip()
     if is_future:
         nova_descricao = f"* {nova_descricao}"
-
+    
     if is_placeholder or tem_asterisco:
-        # Substitui a nota completamente
         nota_final = nova_descricao
-        print(f"📝 Substituindo nota")
     else:
-        # Faz append à nota existente        
-        if nota_existente and nota_existente.strip():
-            # Adiciona separador e nova descrição
-            nota_final = f"{nota_existente}\n---\n{nova_descricao}"
-            print(f"Adicionando à nota existente")
-        else:
-            # Não havia nota, cria nova
-            nota_final = nova_descricao
-            print(f"Criando nova nota")
+        nota_final = f"{nota_existente}\n---\n{nova_descricao}" if nota_existente and nota_existente.strip() else nova_descricao
     
     ws.update_note(cell_address, nota_final)
 
+    extra = ""
+    if parsed_data["tipo"] == "economia":
+        extra = "\n\n" + update_economia_sheet(parsed_data, spreadsheet_id=spreadsheet_id)
+    
     return (
         f"Data {target_date} (dia {row - 2}): tipo={parsed_data['tipo']} "
-        f"{acao} {valor:.2f} (total agora {novo_valor:.2f}){future_indicator}"
-    )       
+        f"{acao} {valor:.2f} (total agora {novo_valor:.2f}){future_indicator}{extra}"
+    )
