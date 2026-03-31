@@ -211,8 +211,14 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
             os.remove(temp_path)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    welcome = """
-*Bot Financeiro da Rafaela*
+    profile = _require_user(update)
+    if not profile:
+        telegram_id = update.effective_user.id
+        await update.message.reply_text(f"Você ({telegram_id}) não está cadastrado(a).\nEntre em contato com o(a) administrador(a) para configurar seu perfil.")
+        return
+    
+    welcome = f"""
+*Bot Financeiro da {profile.name}!*
 
 Como usar:
 1. Envie um áudio com a descrição da sua despesa ou receita.
@@ -233,11 +239,7 @@ Exemplo: "Gastei 50 reais em comida ontem" ou "Recebi 200 reais de salário hoje
 
 Pode mandar vários áudios no mesmo dia, o bot vai organizar tudo direitinho na planilha.
 """
-    profile = _require_user(update)
-    if not profile:
-        telegram_id = update.effective_user.id
-        await update.message.reply_text(f"Você ({telegram_id}) não está cadastrado(a).\nEntre em contato com o(a) administrador(a) para configurar seu perfil.")
-        return
+    
     
     await update.message.reply_text(welcome, parse_mode="Markdown")
 
