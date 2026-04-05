@@ -1,8 +1,3 @@
-Read [](file:///c%3A/Users/Rafael/Documents/Rafa/GitHub/google-sheets-gemini-automation/README.md)
-
-Aqui está o seu arquivo README.md totalmente atualizado e revisado para refletir o estado atual do projeto (com as melhorias recentes como o sistema interativo de exclusão de estimativas usando ia semântica, suporte a gráficos, múltiplos usuários, resumos semanais e mensais):
-
-```markdown
 # 📊 Termômetro Financeiro - Bot Telegram
 
 Automação da "Planilha do Breno" (Termômetro Financeiro) através de um bot do Telegram com IA (Gemini) para registro inteligente de gastos e economias por voz.
@@ -208,11 +203,6 @@ google-sheets-gemini-automation/
 
 ### Confirmações / Respostas pendentes
 - O bot não exclui a estimativa a não ser que você valide com texto ("sim", "não"). 
-
-##  TODO / Melhorias Futuras
-- [ ] Adicionar um valor de "gasto diário" personalizado nativo no prompt (system_prompt).
-- [ ] Suporte a validação por extração em fotos/recibos fiscais (OCR multi-modal pelo Gemini).
-
 ---
 
 ⭐ Se este projeto te ajudou, considere dar uma estrela no GitHub!
