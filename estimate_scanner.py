@@ -21,7 +21,7 @@ def _extrair_descricao_nota(nota: str) -> str:
     Returns:
         str: A descrição extraída da nota, sem o asterisco e sem o valor monetário. None se a nota não possuir asterisco.
     """
-    if not nota:
+    if not (nota.startswith("*") or nota.endswith("*")):
         return None
 
     nota_limpa = nota.strip("*").strip()
