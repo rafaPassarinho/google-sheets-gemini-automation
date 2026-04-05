@@ -17,6 +17,13 @@ from gemini_parser import parse_audio_expense
 from sheets_reader import get_monthly_summary, get_weekly_summary, format_currency, get_monthly_balance_series
 from sheets_writer import append_expense_to_sheet
 from user_config import get_user
+from estimate_scanner import buscar_estimativas_candidatas, apagar_estimativa
+from matcher import find_matching_estimates
+from utils import get_col_for_type_and_date
+
+# estado temporário de confirmações pendentes por chat_id
+# {chat_id: { "match": dict, "spreadsheet_id": str}}
+_pending_confirmation: dict[int, dict] = {} 
 
 load_dotenv()
 
@@ -156,6 +163,104 @@ def format_user_message(parsed_data: dict, sheets_result: str) -> str:
         f"{estimativa_linha}"
     )
 
+async def verificar_estimativas_apos_registro(
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        parsed: dict,
+        spreadsheet_id: str
+):
+    """
+    Após registrar um gasto real, verifica se existem estimativas correspondentes e pergunta ao usuário se deseja apagá-la.
+    Args:
+        update (Update): Objeto de atualização do Telegram.
+        context (ContextTypes.DEFAULT_TYPE): Contexto do handler.
+        parsed (dict): Dados parseados do gasto registrado.
+        spreadsheet_id (str): ID da planilha para buscar estimativas.
+    """
+    descricao = parsed.get("descricao", "").strip()
+    if not descricao:
+        return
+
+    tipo = parsed.get("tipo")
+    data = parsed.get("data")
+
+    col_index, row_start, row_end = get_col_for_type_and_date(tipo, data)
+    if not col_index:
+        return
+
+    candidatos = buscar_estimativas_candidatas(
+        spreadsheet_id=spreadsheet_id,
+        col_index=col_index,
+        row_start=row_start,
+        row_end=row_end
+    )
+    if not candidatos:
+        return
+
+    matches = find_matching_estimates(descricao, candidatos)
+    if not matches:
+        return
+
+    melhor = matches[0]
+    chat_id = update.effective_chat.id
+
+    _pending_confirmation[chat_id] = {
+        "match": melhor,
+        "spreadsheet_id": spreadsheet_id
+    }
+
+    try:
+        mes_estimado = int(str(data).split('-')[1])
+    except:
+        mes_estimado = datetime.now().month
+        
+    dia_estimado = melhor['row'] - 2
+    data_formatada = f"{dia_estimado:02d}/{mes_estimado:02d}"
+
+    await update.message.reply_text(
+        f"Encontrei uma estimativa que pode ser referente a este gasto:\n\n"
+        f"*\"{melhor['descricao']}\"* no dia {data_formatada}\n\n"
+        f"Deseja apagar essa estimativa? Responda *sim* ou *não*.",
+        parse_mode="Markdown"
+    )
+
+async def handle_confirmation_response(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Handler de texto. Intercepta respostas de confirmação pendentes.
+    Deve ser registrado ANTES do handler de texto genérico (se houver).
+    """
+    chat_id = update.effective_chat.id
+    pending = _pending_confirmation.get(chat_id)
+
+    if not pending:
+        return
+
+    resposta = update.message.text.strip().lower()
+
+    if resposta in ("sim", "s", "yes", "y"):
+        match = pending["match"]
+        sucesso = apagar_estimativa(
+            pending["spreadsheet_id"],
+            row=match["row"],
+            col=match["col"]
+        )
+        if sucesso:
+            await update.message.reply_text(
+                f"Estimativa *\"{match['descricao']}\"* apagada com sucesso!",
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                f"Ops, não consegui apagar a estimativa *\"{match['descricao']}\"*. "
+                f"Tente apagar manualmente na célula {match['cell_ref']}.",
+                parse_mode="Markdown"
+            )
+        del _pending_confirmation[chat_id]
+
+    elif resposta in ("não", "nao", "n", "no"):
+        await update.message.reply_text("Ok, mantive a estimativa.")
+        del _pending_confirmation[chat_id]
+
 async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     profile = _require_user(update)
     if not profile:
@@ -191,6 +296,9 @@ async def handle_voice_or_audio(update: Update, context: ContextTypes.DEFAULT_TY
         user_message = format_user_message(parsed, sheets_result)
 
         await update.message.reply_text(user_message)
+
+        if parsed.get("valor", 0) > 0:
+            await verificar_estimativas_apos_registro(update, context, parsed, profile.spreadsheet_id)
 
     except Exception as e:
         # Log completo do erro
@@ -415,6 +523,8 @@ def main():
     app.add_handler(CommandHandler("resumo_mensal", resumo_mensal))
     app.add_handler(CommandHandler("grafico_saldo", grafico_saldo))
     
+    # Handler de confirmação de estimativa (deve ser registrado antes do handler de texto genérico, se houver)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_confirmation_response))
     # Handler de áudio
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO, handle_voice_or_audio))
     

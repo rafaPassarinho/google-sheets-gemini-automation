@@ -17,3 +17,6 @@ pytz==2026.1.post1
 
 # graphing
 matplotlib==3.10.8
+
+# Sentence Transformers for semantic search
+sentence-transformers==5.3.0

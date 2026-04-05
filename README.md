@@ -1,3 +1,8 @@
+Read [](file:///c%3A/Users/Rafael/Documents/Rafa/GitHub/google-sheets-gemini-automation/README.md)
+
+Aqui está o seu arquivo README.md totalmente atualizado e revisado para refletir o estado atual do projeto (com as melhorias recentes como o sistema interativo de exclusão de estimativas usando ia semântica, suporte a gráficos, múltiplos usuários, resumos semanais e mensais):
+
+```markdown
 # 📊 Termômetro Financeiro - Bot Telegram
 
 Automação da "Planilha do Breno" (Termômetro Financeiro) através de um bot do Telegram com IA (Gemini) para registro inteligente de gastos e economias por voz.
@@ -6,6 +11,7 @@ Automação da "Planilha do Breno" (Termômetro Financeiro) através de um bot d
 ![Telegram Bot](https://img.shields.io/badge/telegram-bot-blue.svg)
 ![Google Sheets](https://img.shields.io/badge/google-sheets-green.svg)
 ![Gemini AI](https://img.shields.io/badge/gemini-ai-orange.svg)
+![IA Semântica](https://img.shields.io/badge/sentence--transformers-blueviolet.svg)
 
 ## Sobre o Projeto
 
@@ -14,13 +20,13 @@ Este projeto automatiza o controle financeiro pessoal através de um bot do Tele
 - **Classifica automaticamente** gastos em categorias (receita, despesa fixa, despesa diária, economia)
 - **Atualiza o Google Sheets** em tempo real
 - **Gerencia economias** em aba dedicada
-- **Substitui estimativas** por valores reais automaticamente
+- **Substitui estimativas** por valores reais automaticamente de forma interativa, através de busca semântica (CrossEncoder)
 
 ## Funcionalidades
 
 ### Processamento Inteligente de Áudio
 - Envie áudios naturais como: *"Gastei 25 reais no mercado"*
-- IA identifica automaticamente:
+- A IA identifica automaticamente:
   - Tipo de transação (receita, despesa fixa, despesa diária, economia)
   - Valor
   - Categoria
@@ -38,32 +44,30 @@ Este projeto automatiza o controle financeiro pessoal através de um bot do Tele
 
 ### Recursos Especiais
 
-- **Placeholder Inteligente**: Detecta `R$ 33,36`(valor específico do gasto Diário) como valor provisório e substitui automaticamente
-- **Estimativas com Asterisco**: Notas com `*` indicam valores estimados que serão substituídos
-- **Dia Sem Gastos**: Ao dizer *"hoje não gastei nada"*, limpa valores e remove estimativas
-- **Múltiplos Gastos**: Soma automaticamente gastos adicionais no mesmo dia
-- **Histórico em Notas**: Mantém registro detalhado de cada transação nas notas das células
-
-### Integração com Google Sheets
-
-- **Aba Principal (Ano)**: Registra transações diárias organizadas por mês
-- **Aba Economia**: Acumula valores guardados mensalmente
+- **Busca Semântica de Estimativas**: Toda vez que um gasto é registrado, uma Inteligência Artificial busca no mês inteiro se havia alguma estimativa correspondente cadastrada com `*` na frente da nota. Se encontrar um match forte, o bot pergunta se você deseja apagar a estimativa automaticamente.
+- **Placeholder Inteligente**: Detecta `R$ 33,36` (valor específico do gasto Diário) como valor provisório e substitui automaticamente.
+- **Dia Sem Gastos**: Ao dizer *"hoje não gastei nada"*, limpa valores e remove estimativas.
+- **Múltiplos Gastos**: Soma automaticamente gastos adicionais lançados no mesmo dia.
+- **Gráficos e Resumos**: 
+  - `/grafico_saldo` - Gera um gráfico com a evolução diária do saldo no mês atual.
+  - `/resumo_semanal` e `/resumo_mensal` para visualizar agregados detalhados de saídas, entradas e "performance".
+- **Suporte Multi-usuário**: Múltiplos usuários podem registrar na mesma ou em planilhas diferentes.
 
 ## Tecnologias Utilizadas
 
 - **Python 3.11+**
 - **python-telegram-bot**: Criação do bot do Telegram
 - **Google Gemini AI**: Processamento de linguagem natural e transcrição de áudio
-- **Google Sheets API**: Atualização automática da planilha
-- **gspread**: Interface Python para Google Sheets
-- **python-dotenv**: Gerenciamento de variáveis de ambiente
+- **Google Sheets API** (`gspread`, `google-api-python-client`): Atualização automática da planilha
+- **Sentence Transformers** (CrossEncoder): Encontra matches de estimativas por similaridade semântica
+- **Matplotlib**: Geração do gráfico de saldo
 
 ## Pré-requisitos
 
 ### 1. API Keys e Credenciais
 
 - **Bot do Telegram**: Token obtido via [@BotFather](https://t.me/botfather)
-- **Google Gemini API**: Chave da [Google AI Studio](https://makersuite.google.com/app/apikey)
+- **Google Gemini API**: Chave da [Google AI Studio](https://aistudio.google.com/app/apikey)
 - **Google Service Account**: Credenciais JSON da [Google Cloud Console](https://console.cloud.google.com/)
 - **Google Sheets**: ID da planilha a ser atualizada
 
@@ -116,25 +120,29 @@ pip install -r requirements.txt
 
 ### 4. Configure as Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto:
+Crie um arquivo .env na raiz do projeto:
 
 ```env
-TELEGRAM_BOT_TOKEN=seu_token_do_botfather
+TELEGRAM_TOKEN=seu_token_do_botfather
 GOOGLE_API_KEY=sua_chave_gemini_api
-GOOGLE_SHEETS_ID=id_da_sua_planilha
-```
+GOOGLE_CREDENTIALS_JSON={"type":"service_account"...} # Opcional se usar arquivo credentials.json físico
 
-** Importante**: O arquivo `.env` já está no `.gitignore` e não deve ser commitado!
+# (Para único usuário)
+GOOGLE_SHEETS_ID=id_da_sua_planilha
+DEFAULT_TELEGRAM_USER_ID=seu_user_id_do_telegram
+
+# (Para múltiplos usuários / Multi-planilha)
+# USER_CONFIG_JSON={"users":[{"telegram_user_id":123,"name":"João","spreadsheet_id":"ABC","placeholder_value": 0.0, "timezone": "America/Sao_Paulo", "active": true}]}
+```
 
 ### 5. Adicione as Credenciais do Google
 
-Coloque o arquivo `credentials.json` (Service Account) na raiz do projeto.
+Coloque o arquivo credentials.json (Service Account) na raiz do projeto, ou passe o JSON via `GOOGLE_CREDENTIALS_JSON` em ambientes Cloud.
 
 ### 6. Compartilhe a Planilha
 
-1. Abra `credentials.json`
-2. Copie o valor do campo `"client_email"`
-3. Compartilhe sua planilha Google Sheets com esse email (permissão de Editor)
+1. Copie o valor do campo `"client_email"` do seu arquivo credentials.
+2. Compartilhe sua planilha Google Sheets com esse email (permissão de Editor).
 
 ## Como Usar
 
@@ -144,92 +152,66 @@ Coloque o arquivo `credentials.json` (Service Account) na raiz do projeto.
 python main.py
 ```
 
-Você verá: ` Bot iniciado... `
+Você verá: `Bot iniciado...`
 
 ### Comandos do Bot
 
 - `/start` - Inicia a conversa e mostra instruções
+- `/ajuda` - Dicas de como falar as despesas
+- `/resumo_semanal` - Envia um compilado dos gastos da semana
+- `/resumo_mensal` - Mostra um compilado dos gastos do mês corrente
+- `/grafico_saldo` - Retorna imagem estatística de salto até a data corrente
 
 ### Exemplos de Uso
 
-#### Registrar Despesa Diária
-**Áudio:** *"Gastei 25 reais no mercado"*
+#### Registrar Despesa e Tratar Estimativa (Match Semântico)
+**Setup:** Célula do dia 20 tem nota `*Pagamento wifi` (estimativa).
+
+**Áudio:** *"Gastei 119 reais hoje de wifi."*
 
 **Resultado:**
-- Valor adicionado na coluna "Diário"
-- Nota criada com a descrição
-- Resposta: *"Registrado! R$ 25,00 em mercado"*
-
-#### Registrar Despesa Fixa
-**Áudio:** *"Paguei 120 reais de energia"*
-
-**Resultado:**
-- Valor adicionado na coluna "Saída"
-- Categoria: energia
-
-#### Guardar Economia
-**Áudio:** *"Guardei 200 reais na caixinha"*
-
-**Resultado:**
-- Valor adicionado na coluna "Saída" (aba principal)
-- Valor somado na aba "Economia" (linha do mês atual)
-- Resposta com total economizado no mês
+1. O valor é adicionado no dia e categoria correspondentes.
+2. O bot responde: *Encontrei uma estimativa que pode ser referente a este gasto: "Pagamento wifi" no dia 20/04. Deseja apagar essa estimativa? Responda sim ou não.*
+3. Ao responder "sim", ele remove valor e nota estimadas no dia 20 mantendo só o real.
 
 #### Dia Sem Gastos
 **Áudio:** *"Hoje não gastei nada"*
 
 **Resultado:**
 - Coluna "Diário": zerada (0.0)
-- Coluna "Saída": limpa (remove estimativas)
-- Todas as estimativas com `*` removidas
-
-#### Substituir Estimativa
-**Setup:** Célula com `R$ 50,00` e nota `"Estimativa mercado *"`
-
-**Áudio:** *"Gastei 35 reais no mercado"*
-
-**Resultado:**
-- Valor substituído: `R$ 35,00` (não soma!)
-- Nota substituída (remove o asterisco)
+- Coluna "Saída": limpa (remove estimativas atreladas à célula correspondente)
 
 ## Estrutura do Projeto
 
 ```
 google-sheets-gemini-automation/
-├── main.py                 # Bot do Telegram e handlers
+├── main.py                 # Bot do Telegram e handlers (incluindo handler interativo)
 ├── gemini_parser.py        # Integração com Gemini AI
-├── sheets_writer.py        # Lógica de atualização do Google Sheets
-├── utils.py                # Funções auxiliares (datas, colunas)
+├── sheets_writer.py        # Escrita e limpeza da Planilha do Google Sheets
+├── sheets_reader.py        # Leitura da planilha para resumos e gráficos
+├── estimate_scanner.py     # Varredor de notas com estimativas '*'
+├── matcher.py              # Motor de NLP (CrossEncoder)
+├── utils.py                # Funções de data, coluna/linha
+├── user_config.py          # Gestão de múltiplos usuários baseada no telegram_id
 ├── requirements.txt        # Dependências Python
 ├── .env                    # Variáveis de ambiente (não commitado)
 ├── credentials.json        # Credenciais Google (não commitado)
-├── .gitignore             # Arquivos ignorados pelo Git
-├── temp/                   # Áudios temporários (criado automaticamente)
-└── README.md              # Este arquivo
+├── temp/                   # Pasta para arquivos de áudio temporários
+└── README.md               # Documentação
 ```
 
 ## Troubleshooting
 
-### Erro de credenciais
-- Verifique se o arquivo `.env` existe e contém todas as variáveis
-- Confirme que `credentials.json` está na raiz do projeto
-- Verifique se a planilha foi compartilhada com o email da Service Account
+### Erro de credenciais ou "Aba não encontrada"
+- Certifique-se de que a aba tem o ano atual (ex: "2026") criado e bem formatado.
+- Verifique se a planilha foi compartilhada com o email da Service Account.
 
-### Erro "Aba não encontrada"
-- Certifique-se de que existe uma aba com o ano atual (ex: "2026")
-- Verifique se existe a aba "Economia"
-
-### Áudio não processa
-- Verifique se a pasta `temp/` existe
-- Confirme que a GOOGLE_API_KEY do Gemini está válida
-- Teste o bot localmente primeiro antes do deploy
+### Confirmações / Respostas pendentes
+- O bot não exclui a estimativa a não ser que você valide com texto ("sim", "não"). 
 
 ##  TODO / Melhorias Futuras
-- [ ] Adicionar um valor de "gasto diário" personalizado por usuário
-- [ ] Adicionar suporte a múltiplos usuários
-- [ ] Geração de gráficos automáticos no bot do Telegram
-- [ ] Comandos para consultar totais do mês
-- [ ] Suporte a fotos de notas fiscais (OCR)
+- [ ] Adicionar um valor de "gasto diário" personalizado nativo no prompt (system_prompt).
+- [ ] Suporte a validação por extração em fotos/recibos fiscais (OCR multi-modal pelo Gemini).
 
 ---
 

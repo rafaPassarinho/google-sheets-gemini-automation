@@ -1,5 +1,7 @@
 import os
 import pytz
+import calendar
+
 from datetime import datetime
 from dotenv import load_dotenv
 
@@ -68,6 +70,54 @@ def get_columns_for_date(target_date: str=None):
         "saldo_col": saldo_col
     }
 
+def get_col_for_type_and_date(tipo: str, data) -> tuple[int | None, int, int]:
+    """
+    Retorna (col_index, row_start, row_end) para um tipo de lançamento e data.
+    
+    Args:
+        tipo: "despesa_diaria", "despesa_fixa", "receita", "economia"
+        data: datetime.date ou datetime.datetime referente ao lançamento
+
+    Return:
+        col_index: índice da coluna onde o tipo é registrado (1-based, A=1). None se o tipo não estiver coluna rastreável.
+        row_start: primeira linha do mês (linha 3, onde começa o dia 1)
+        row_end: última linha do mês (linha 33, onde termina o dia 31)
+        
+    """
+    if isinstance(data, str):
+        dt = datetime.fromisoformat(data)
+    elif hasattr(data, "month"):
+        dt = data
+    else:
+        dt = datetime.now(TIMEZONE)
+
+    mes_offset_map = {
+        1: 0, 2: 6, 3: 12, 4: 18,
+        5: 24, 6: 30, 7: 36, 8: 42,
+        9: 48, 10: 54, 11: 60, 12: 66,
+    }
+
+    mes_offset = mes_offset_map[dt.month]
+
+    entrada_col = 2 + mes_offset
+    saida_col = 3 + mes_offset
+    diario_col = 4 + mes_offset
+
+    tipo_para_col = {
+        "receita": entrada_col,
+        "despesa_fixa": saida_col,
+        "despesa_diaria": diario_col,
+        "economia": saida_col,
+    }
+
+    col_index = tipo_para_col.get(tipo)
+
+    _, dias_no_mes = calendar.monthrange(dt.year, dt.month)
+    row_start = dt.day + 3  # linha 3 para dia 1, linha 4 para dia 2, ...
+    row_end = 3 + dias_no_mes - 1
+
+    return col_index, row_start, row_end
+    
 def get_sheet_name():
     """Nome da aba é o ano atual, ex: "2024"."""
     return str(datetime.now().year)
